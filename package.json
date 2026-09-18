@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "check:google": "node scripts/check-google-readiness.mjs",
+    "check:google:connected": "node scripts/check-google-readiness.mjs --require-connected"
   }
 }

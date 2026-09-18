@@ -36,6 +36,8 @@
         <div><span>Guests / orders</span><strong>${Number(event.guestCount || 0)}</strong></div>
         <div><span>Dietary and allergen controls</span><strong>${esc(event.allergens || "See teacher direction")}</strong></div>
         <div><span>Customer commitment</span><strong>${esc(event.requirements || "See teacher direction")}</strong></div>
+        <div><span>Learning focus</span><strong>${esc(event.learningFocus || "Teacher will identify the event-level focus")}</strong></div>
+        <div><span>Safety and sanitation controls</span><strong>${esc(event.safetyControls || "Follow the approved kitchen safety plan")}</strong></div>
       </div>
       <div class="menu">${(event.menu || []).map(item => `<span>${esc(item.name)}${Number(item.required || 0) ? ` · ${Number(item.required)}` : ""}${item.portion ? ` · ${esc(item.portion)}` : ""}</span>`).join("")}</div>
       <div class="tasks-heading"><div><p class="eyebrow">Production assignments</p><h3>${teamFilter === "all" ? "All teams and stations" : esc(teamFilter)}</h3></div><button class="secondary" type="button" data-print-event="${esc(event.id)}">Print packet</button></div>
@@ -125,7 +127,7 @@
     const event = (snapshot.events || []).find(item => item.id === eventId);
     if (!event) return;
     const tasks = (event.tasks || []).filter(task => teamFilter === "all" || String(task.teamLabel || "Team") === teamFilter);
-    q("#printArea").innerHTML = `<h1>${esc(event.name)}</h1><p>${esc(event.clientDisplayName || "Private event")} · ${dateLabel(event.serviceDate)} · ${esc(event.serviceTime || "")}</p><p><strong>Commitment:</strong> ${esc(event.requirements || "")}</p><p><strong>Allergens:</strong> ${esc(event.allergens || "")}</p>${tasks.map(task => `<section class="print-task"><h2>${esc(task.teamLabel || "Team")} · ${esc(task.station || "Station")}</h2><h3>${esc(task.name)}</h3><p>${esc(task.quantity || "")} · ${esc(task.deadline || "")}</p><p>${esc(task.instructions || "")}</p></section>`).join("")}`;
+    q("#printArea").innerHTML = `<h1>${esc(event.name)}</h1><p>${esc(event.clientDisplayName || "Private event")} · ${dateLabel(event.serviceDate)} · ${esc(event.serviceTime || "")}</p><p><strong>Commitment:</strong> ${esc(event.requirements || "")}</p><p><strong>Allergens:</strong> ${esc(event.allergens || "")}</p><p><strong>Learning focus:</strong> ${esc(event.learningFocus || "")}</p><p><strong>Safety controls:</strong> ${esc(event.safetyControls || "")}</p>${tasks.map(task => `<section class="print-task"><h2>${esc(task.teamLabel || "Team")} · ${esc(task.station || "Station")}</h2><h3>${esc(task.name)}</h3><p>${esc(task.quantity || "")} · ${esc(task.deadline || "")}</p><p>${esc(task.instructions || "")}</p><p><strong>Equipment:</strong> ${esc(list(task.equipment).join(", "))}</p><p><strong>Quality controls:</strong> ${esc(list(task.qualityControls).join(" · "))}</p><p><strong>Handoff:</strong> ${esc(task.handoff || "")}</p></section>`).join("")}`;
     window.print();
   }
 

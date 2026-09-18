@@ -72,6 +72,8 @@ test("student publication sanitizer removes identity, contact, budget, and audit
     service_format: "Delivery",
     requirements: "Ready by 7:15 AM",
     allergens: "Nut-free choices",
+    learning_focus: "Communication and quality control",
+    safety_controls: "Prevent allergen cross-contact",
     menu_json: JSON.stringify([{ name: "Muffins", required: 80, supplierPrice: 27 }]),
     tasks_json: JSON.stringify([{ id: "task-1", teamLabel: "Team A", station: "Kitchen 1", name: "Muffins", students: ["Student One"], submittedBy: "student@example.test", quantity: "80", instructions: "Package and label" }]),
     revision: 2,
@@ -82,6 +84,8 @@ test("student publication sanitizer removes identity, contact, budget, and audit
   const json = JSON.stringify(result);
   assert.equal(result.clientDisplayName, "GCSD Professional Learning");
   assert.equal(result.tasks[0].teamLabel, "Team A");
+  assert.equal(result.learningFocus, "Communication and quality control");
+  assert.equal(result.safetyControls, "Prevent allergen cross-contact");
   ["Private Person", "private@example.test", "555-0100", "$900", "Private staff note", "Student One", "student@example.test", "teacher@example.test", "supplierPrice"].forEach(secret => assert.equal(json.includes(secret), false, `publication leaked ${secret}`));
 });
 
@@ -104,20 +108,43 @@ test("GitHub student view is manual-refresh and read-only", async () => {
 
 test("publication validation requires the minimum operational event fields", async () => {
   const context = await teacherContext();
-  const issues = Array.from(context.publicationIssues_({ event_name: "", client_display_name: "", service_date: "", guest_count: 0, menu_json: "[]" }));
+  const issues = Array.from(context.publicationIssues_({ event_name: "", client_display_name: "", service_date: "", guest_count: 0, menu_json: "[]", tasks_json: "[]" }));
   assert.deepEqual(issues, [
     "event name is missing",
     "client display name is missing",
     "service date is missing",
     "guest count must be greater than zero",
-    "menu is empty"
+    "menu is empty",
+    "production assignments are empty"
   ]);
+});
+
+test("configuration rejects URLs, personal accounts, and a missing project folder", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  assert.throws(() => context.configureVerticalSlice({
+    spreadsheetId: "https://docs.google.com/spreadsheets/d/not-an-id/edit",
+    documentFolderId: "folder_12345678901234567890",
+    allowedTeacherEmails: "teacher@greececsd.org",
+    allowedDomain: "greececsd.org"
+  }), /spreadsheetId must be an ID/);
+  assert.throws(() => context.configureVerticalSlice({
+    spreadsheetId: "sheet_12345678901234567890",
+    documentFolderId: "folder_12345678901234567890",
+    allowedTeacherEmails: "teacher@gmail.com",
+    allowedDomain: "greececsd.org"
+  }), /@greececsd\.org/);
+  assert.throws(() => context.configureVerticalSlice({
+    spreadsheetId: "sheet_12345678901234567890",
+    allowedTeacherEmails: "teacher@greececsd.org",
+    allowedDomain: "greececsd.org"
+  }), /documentFolderId is required/);
 });
 
 test("request acceptance, draft save, publication, and document generation complete the vertical slice", async () => {
   const fake = fakeAppsScript();
   const context = await teacherContext(fake.globals);
-  context.configureVerticalSlice({ spreadsheetId: "sheet-1", documentFolderId: "folder-1", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
   context.appendRecord_("Requests", {
     request_id: "req-1", submitted_at: "2026-09-17T12:00:00.000Z", requester: "GCSD Professional Learning",
     contact_name: "Private Contact", contact_email: "private@example.test", contact_phone: "555-0100",
@@ -126,11 +153,13 @@ test("request acceptance, draft save, publication, and document generation compl
     requirements: "Ready by 7:15 AM", allergens: "Nut-free choices", internal_notes: "Private", status: "New", event_id: "", updated_at: "2026-09-17T12:00:00.000Z"
   });
   const event = context.acceptRequest("req-1");
-  context.saveEvent({ ...event, client_display_name: "GCSD Professional Learning", menu: [{ name: "Muffins", required: 80 }], tasks: [{ teamLabel: "Team A", station: "Kitchen 1", name: "Muffins", quantity: "80", instructions: "Package and label" }] });
+  context.saveEvent({ ...event, client_display_name: "GCSD Professional Learning", learning_focus: "Communication and culinary math", safety_controls: "Prevent cross-contact; sanitize station", menu: [{ name: "Muffins", required: 80 }], tasks: [{ teamLabel: "Team A", station: "Kitchen 1", name: "Muffins", quantity: "80", instructions: "Package and label", equipment: ["sheet pans"], qualityControls: ["count verified"], handoff: "Deliver to service team" }] });
   const publication = context.publishEvent(event.event_id);
   const document = context.generateEventDocument(event.event_id);
   assert.equal(publication.revision, 1);
   assert.equal(publication.snapshot.events[0].tasks[0].teamLabel, "Team A");
+  assert.deepEqual(Array.from(publication.snapshot.events[0].tasks[0].equipment), ["sheet pans"]);
+  assert.equal(publication.snapshot.events[0].learningFocus, "Communication and culinary math");
   assert.equal(JSON.stringify(publication.snapshot).includes("Private Contact"), false);
   assert.match(document.file_url, /^https:\/\/docs\.google\.test\//);
   assert.equal(context.records_("Requests")[0].status, "Accepted");

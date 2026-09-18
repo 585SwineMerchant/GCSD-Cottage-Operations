@@ -15,7 +15,7 @@ The public project has no write functions and never reads Requests, Documents, o
 
 ## 1. Create the district-owned resources
 
-In the approved Shared Drive, create:
+In the protected GCSD account's My Drive, create a new top-level folder named `GCSD Cottage Operations`, then create inside it:
 
 1. One blank Google Sheet for operational data.
 2. One folder for generated Event Order documents.
@@ -30,8 +30,8 @@ In the Apps Script editor, run:
 
 ```javascript
 configureVerticalSlice({
-  spreadsheetId: "SHARED_DRIVE_SPREADSHEET_ID",
-  documentFolderId: "SHARED_DRIVE_FOLDER_ID",
+  spreadsheetId: "GCSD_DRIVE_SPREADSHEET_ID",
+  documentFolderId: "GCSD_DRIVE_FOLDER_ID",
   allowedTeacherEmails: "teacher1@greececsd.org,teacher2@greececsd.org",
   allowedDomain: "greececsd.org"
 });
@@ -59,7 +59,7 @@ The code also enforces the configured teacher email allowlist. Keep the allowlis
 Create a second standalone Apps Script project. Add the two files from `public-feed/`, then run:
 
 ```javascript
-configurePublicFeed("SHARED_DRIVE_SPREADSHEET_ID");
+configurePublicFeed("GCSD_DRIVE_SPREADSHEET_ID");
 ```
 
 Deploy this project as a web app:
@@ -95,9 +95,11 @@ The student page performs one request when opened. It does not poll. **Refresh E
 5. Save the draft and confirm the GitHub student page has not changed.
 6. Click **Publish to students**.
 7. Open or manually refresh the GitHub student page and confirm its revision and timestamp.
-8. Click **Generate Event Order document** and confirm the Doc appears in the Shared Drive folder.
+8. Click **Generate Event Order document** and confirm the Doc appears in the configured GCSD My Drive folder.
 9. Confirm the public payload contains no request contact details, budget, internal notes, student identity, roster, or staff audit data.
 
 ## Current vertical-slice boundaries
 
 This proves the new infrastructure before the full command center is ported. It includes the request inbox, core Event Order fields, generic production assignments, controlled publication, student display, and one operational document. Menu scaling, purchasing, the full production planner, budgets, closeout, archive, and Recipe Studio import remain version-two migration stages after this gate passes.
+
+For a click-by-click protected-account session, use [`../docs/weekend-google-setup.md`](../docs/weekend-google-setup.md).

@@ -2,9 +2,10 @@ const PUBLICATIONS_SHEET = "Publications";
 const PUBLICATION_HEADERS = ["publication_id", "event_id", "revision", "published_at", "published_by", "snapshot_json"];
 
 function configurePublicFeed(spreadsheetId) {
-  if (!spreadsheetId) throw new Error("spreadsheetId is required.");
-  PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", String(spreadsheetId).trim());
-  return { ok: true };
+  const id = String(spreadsheetId || "").trim();
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(id)) throw new Error("spreadsheetId must be an ID copied from a Google URL, not the full URL.");
+  PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", id);
+  return { ok: true, spreadsheetId: id };
 }
 
 function doGet(event) {
@@ -23,7 +24,12 @@ function doGet(event) {
 function latestSnapshot_() {
   const id = PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
   if (!id) return emptySnapshot_("Public feed is not configured.");
-  const sheet = SpreadsheetApp.openById(id).getSheetByName(PUBLICATIONS_SHEET);
+  let sheet;
+  try {
+    sheet = SpreadsheetApp.openById(id).getSheetByName(PUBLICATIONS_SHEET);
+  } catch (_) {
+    return emptySnapshot_("Published Event Orders are temporarily unavailable.");
+  }
   if (!sheet || sheet.getLastRow() < 2) return emptySnapshot_("");
   const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, PUBLICATION_HEADERS.length).getDisplayValues();
   rows.sort((a, b) => String(b[3]).localeCompare(String(a[3])));

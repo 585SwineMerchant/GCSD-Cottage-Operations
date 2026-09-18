@@ -24,8 +24,10 @@
           <label class="span2">Service format<input name="service_format"></label>
           <label class="span2">Customer commitment<textarea name="requirements" rows="3"></textarea></label>
           <label class="span2">Dietary needs and allergen controls<textarea name="allergens" rows="3"></textarea></label>
+          <label class="span2">Learning focus · event-level skills only<textarea name="learning_focus" rows="2" placeholder="Example: Kitchen communication, culinary math, quality control"></textarea></label>
+          <label class="span2">Safety and sanitation controls<textarea name="safety_controls" rows="3" placeholder="Example: Cold food at 41°F or below; prevent allergen cross-contact; complete station sanitation"></textarea></label>
           <label class="span2">Menu · one item per line<textarea name="menu_text" rows="5" placeholder="Tomato soup | 80\nFocaccia | 100"></textarea></label>
-          <label class="span2">Production assignments · Team | Station | Product | Quantity | Deadline | Instructions<textarea name="tasks_text" rows="7" placeholder="Team A | Kitchen 1 | Tomato soup | 80 cups | 10:45 AM | Hold at 140°F or above"></textarea></label>
+          <label class="span2">Production assignments · Team | Station | Product | Quantity | Deadline | Instructions | Equipment | Quality controls | Handoff<textarea name="tasks_text" rows="8" placeholder="Team A | Kitchen 1 | Tomato soup | 80 cups | 10:45 AM | Hold hot until service | Stockpot, ladle | 165°F reheat, taste approved | Transfer to service team"></textarea></label>
         </div>
         <div class="meta" id="eventMeta"></div>
         <div class="actions"><button class="secondary" type="submit">Save draft</button><button class="primary" id="publish" type="button">Publish to students</button><button class="secondary" id="generate" type="button">Generate Event Order document</button></div>
@@ -41,16 +43,16 @@
     function setStatus(message){q("#status").textContent=message||""}
     function parseJson(value,fallback=[]){try{return JSON.parse(value||"null")||fallback}catch{return fallback}}
     function menuText(event){return parseJson(event.menu_json).map(item=>[item.name,item.required||""].filter(Boolean).join(" | ")).join("\n")}
-    function tasksText(event){return parseJson(event.tasks_json).map(t=>[t.teamLabel,t.station,t.name,t.quantity,t.deadline,t.instructions].join(" | ")).join("\n")}
+    function tasksText(event){return parseJson(event.tasks_json).map(t=>[t.teamLabel,t.station,t.name,t.quantity,t.deadline,t.instructions,(t.equipment||[]).join(", "),(t.qualityControls||[]).join(", "),t.handoff].join(" | ")).join("\n")}
     function parseMenu(text){return text.split(/\n+/).map(line=>{const [name,required]=line.split("|").map(v=>v.trim());return{name,required:Number(required)||0}}).filter(x=>x.name)}
-    function parseTasks(text){return text.split(/\n+/).map((line,i)=>{const [teamLabel,station,name,quantity,deadline,instructions]=line.split("|").map(v=>v.trim());return{id:`task-${i+1}`,teamLabel,station,name,quantity,deadline,instructions}}).filter(x=>x.name)}
+    function parseTasks(text){return text.split(/\n+/).map((line,i)=>{const [teamLabel,station,name,quantity,deadline,instructions,equipment,qualityControls,handoff]=line.split("|").map(v=>v.trim());return{id:`task-${i+1}`,teamLabel,station,name,quantity,deadline,instructions,equipment:(equipment||"").split(",").map(v=>v.trim()).filter(Boolean),qualityControls:(qualityControls||"").split(",").map(v=>v.trim()).filter(Boolean),handoff}}).filter(x=>x.name)}
     function render(){
       q("#requests").innerHTML=state.requests.filter(r=>r.status!=="Accepted").map(r=>`<article class="request"><span>${esc(r.status)}</span><h3>${esc(r.event_name)}</h3><p>${esc(r.requester)} · ${esc(r.service_date)} · ${esc(r.guest_count)} guests</p><p>${esc(r.requested_menu||"Menu not supplied")}</p><button class="primary" data-accept="${esc(r.request_id)}">Accept into draft</button></article>`).join("")||'<div class="empty">No open requests.</div>';
       q("#eventSelect").innerHTML='<option value="">Choose an accepted request</option>'+state.events.map(e=>`<option value="${esc(e.event_id)}" ${e.event_id===state.currentId?"selected":""}>${esc(e.event_name)} · ${esc(e.stage)}</option>`).join("");
       document.querySelectorAll("[data-accept]").forEach(b=>b.onclick=()=>accept(b.dataset.accept));
       const event=state.events.find(e=>e.event_id===state.currentId); q("#eventForm").hidden=!event;
       if(!event)return;
-      const f=q("#eventForm");["event_id","event_name","client_display_name","event_type","school","service_date","service_time","location","guest_count","service_format","requirements","allergens"].forEach(k=>f.elements[k].value=event[k]||"");
+      const f=q("#eventForm");["event_id","event_name","client_display_name","event_type","school","service_date","service_time","location","guest_count","service_format","requirements","allergens","learning_focus","safety_controls"].forEach(k=>f.elements[k].value=event[k]||"");
       f.elements.menu_text.value=menuText(event);f.elements.tasks_text.value=tasksText(event);
       q("#eventMeta").textContent=`${event.stage} · Revision ${event.revision||0}${event.published_at?` · Published ${new Date(event.published_at).toLocaleString()}`:" · Not yet published"}`;
       q("#documents").innerHTML=state.documents.filter(d=>d.event_id===event.event_id).map(d=>`<a href="${esc(d.file_url)}" target="_blank" rel="noopener">Open ${esc(d.document_type)} · ${new Date(d.created_at).toLocaleString()}</a>`).join("");

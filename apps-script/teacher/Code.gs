@@ -8,7 +8,7 @@ const SHEETS = Object.freeze({
 
 const HEADERS = Object.freeze({
   Requests: ["request_id", "submitted_at", "requester", "contact_name", "contact_email", "contact_phone", "event_name", "event_type", "school", "service_date", "service_time", "guest_count", "service_format", "requested_menu", "requirements", "allergens", "internal_notes", "status", "event_id", "updated_at"],
-  Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by"],
+  Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by"],
   Publications: ["publication_id", "event_id", "revision", "published_at", "published_by", "snapshot_json"],
   Documents: ["document_id", "event_id", "document_type", "file_id", "file_url", "created_at", "created_by"],
   Audit: ["audit_id", "occurred_at", "actor", "action", "record_type", "record_id", "detail_json"]
@@ -26,17 +26,28 @@ function doGet() {
  * with the district account that will own the deployment.
  */
 function configureVerticalSlice(config) {
-  assertTeacher_();
+  const teacher = assertTeacher_();
   if (!config || !config.spreadsheetId) throw new Error("spreadsheetId is required.");
+  if (!config.documentFolderId) throw new Error("documentFolderId is required so generated documents stay in the project folder.");
+  const spreadsheetId = googleId_(config.spreadsheetId, "spreadsheetId");
+  const documentFolderId = googleId_(config.documentFolderId, "documentFolderId");
+  const allowedDomain = clean_(config.allowedDomain || "greececsd.org", 200).toLowerCase();
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(allowedDomain)) throw new Error("allowedDomain must be a valid email domain.");
+  const allowedTeacherEmails = normalizeEmails_(config.allowedTeacherEmails);
+  if (!allowedTeacherEmails.length) throw new Error("At least one allowedTeacherEmails address is required for the pilot.");
+  if (allowedTeacherEmails.some(email => !email.endsWith(`@${allowedDomain}`))) {
+    throw new Error(`Every allowed teacher must use the @${allowedDomain} domain.`);
+  }
+  if (!allowedTeacherEmails.includes(teacher.email)) throw new Error("The configuring account must be included in allowedTeacherEmails.");
   const props = PropertiesService.getScriptProperties();
   props.setProperties({
-    SPREADSHEET_ID: String(config.spreadsheetId).trim(),
-    DOCUMENT_FOLDER_ID: String(config.documentFolderId || "").trim(),
-    ALLOWED_TEACHER_EMAILS: String(config.allowedTeacherEmails || "").toLowerCase(),
-    ALLOWED_DOMAIN: String(config.allowedDomain || "greececsd.org").toLowerCase()
+    SPREADSHEET_ID: spreadsheetId,
+    DOCUMENT_FOLDER_ID: documentFolderId,
+    ALLOWED_TEACHER_EMAILS: allowedTeacherEmails.join(","),
+    ALLOWED_DOMAIN: allowedDomain
   }, false);
   initializeWorkbook_();
-  return { ok: true, spreadsheetId: config.spreadsheetId };
+  return { ok: true, spreadsheetId, documentFolderId, allowedTeacherEmails };
 }
 
 function initializeWorkbook() {
@@ -61,6 +72,16 @@ function initializeWorkbook_() {
 
 function createRequestForm() {
   assertTeacher_();
+  const props = PropertiesService.getScriptProperties();
+  const existingId = props.getProperty("REQUEST_FORM_ID");
+  if (existingId) {
+    try {
+      const existing = FormApp.openById(existingId);
+      return { id: existing.getId(), editUrl: existing.getEditUrl(), publishedUrl: existing.getPublishedUrl(), existing: true };
+    } catch (_) {
+      // The saved form was removed or access changed; create a replacement below.
+    }
+  }
   const form = FormApp.create("GCSD Culinary Event Request");
   form.setDescription("Submit a request for consideration. Submission does not confirm that the Culinary Pathway has accepted the event.");
   form.addTextItem().setTitle("Requester / organization").setRequired(true);
@@ -78,7 +99,8 @@ function createRequestForm() {
   form.addParagraphTextItem().setTitle("Service requirements");
   form.addParagraphTextItem().setTitle("Dietary needs and allergens");
   ScriptApp.newTrigger("onRequestFormSubmit").forForm(form).onFormSubmit().create();
-  return { id: form.getId(), editUrl: form.getEditUrl(), publishedUrl: form.getPublishedUrl() };
+  props.setProperty("REQUEST_FORM_ID", form.getId());
+  return { id: form.getId(), editUrl: form.getEditUrl(), publishedUrl: form.getPublishedUrl(), existing: false };
 }
 
 function onRequestFormSubmit(event) {
@@ -137,6 +159,7 @@ function acceptRequest(requestId) {
       service_time: request.service_time, location: request.school,
       guest_count: positiveInteger_(request.guest_count, 0), service_format: request.service_format,
       requirements: request.requirements, allergens: request.allergens,
+      learning_focus: "", safety_controls: "",
       menu_json: JSON.stringify(menuFromText_(request.requested_menu)), tasks_json: "[]",
       stage: "Draft", revision: 0, published_at: "", published_by: "",
       created_at: now, updated_at: now, updated_by: teacher.email
@@ -167,6 +190,8 @@ function saveEvent(input) {
       service_format: clean_(input.service_format, 200),
       requirements: clean_(input.requirements, 4000),
       allergens: clean_(input.allergens, 4000),
+      learning_focus: clean_(input.learning_focus, 2000),
+      safety_controls: clean_(input.safety_controls, 4000),
       menu_json: JSON.stringify(normalizeMenu_(input.menu)),
       tasks_json: JSON.stringify(normalizeTasks_(input.tasks)),
       stage: existing.published_at ? "Revised draft" : "Draft",
@@ -233,12 +258,19 @@ function generateEventDocument(eventId) {
   body.appendParagraph(event.requirements || "No additional requirements recorded.");
   body.appendParagraph("Dietary needs and allergen controls").setHeading(DocumentApp.ParagraphHeading.HEADING1);
   body.appendParagraph(event.allergens || "No controls recorded.");
+  body.appendParagraph("Learning focus").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  body.appendParagraph(event.learning_focus || "No event-level learning focus recorded.");
+  body.appendParagraph("Safety and sanitation controls").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  body.appendParagraph(event.safety_controls || "Follow the approved kitchen safety and sanitation plan.");
   body.appendParagraph("Menu").setHeading(DocumentApp.ParagraphHeading.HEADING1);
   parseJson_(event.menu_json, []).forEach(item => body.appendListItem(`${item.name}${item.required ? ` · ${item.required}` : ""}`));
   body.appendParagraph("Production assignments").setHeading(DocumentApp.ParagraphHeading.HEADING1);
   parseJson_(event.tasks_json, []).forEach(task => {
     body.appendParagraph(`${task.teamLabel || "Team"} · ${task.station || "Station pending"} · ${task.name}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
     body.appendParagraph([task.quantity, task.deadline, task.instructions].filter(Boolean).join(" · "));
+    if (task.equipment && task.equipment.length) body.appendParagraph(`Equipment: ${task.equipment.join(", ")}`);
+    if (task.qualityControls && task.qualityControls.length) body.appendParagraph(`Quality controls: ${task.qualityControls.join(" · ")}`);
+    if (task.handoff) body.appendParagraph(`Handoff: ${task.handoff}`);
   });
   doc.saveAndClose();
   const folderId = PropertiesService.getScriptProperties().getProperty("DOCUMENT_FOLDER_ID");
@@ -266,6 +298,8 @@ function sanitizePublicEvent_(event) {
     serviceFormat: clean_(event.service_format, 200),
     requirements: clean_(event.requirements, 4000),
     allergens: clean_(event.allergens, 4000),
+    learningFocus: clean_(event.learning_focus, 2000),
+    safetyControls: clean_(event.safety_controls, 4000),
     menu: normalizeMenu_(parseJson_(event.menu_json, event.menu || [])),
     tasks,
     stage: "Published",
@@ -304,6 +338,7 @@ function publicationIssues_(event) {
   if (!String(event.service_date || "").trim()) issues.push("service date is missing");
   if (!positiveInteger_(event.guest_count, 0)) issues.push("guest count must be greater than zero");
   if (!normalizeMenu_(parseJson_(event.menu_json, [])).length) issues.push("menu is empty");
+  if (!normalizeTasks_(parseJson_(event.tasks_json, [])).length) issues.push("production assignments are empty");
   return issues;
 }
 
@@ -321,7 +356,7 @@ function latestPublishedEvents_() {
 
 function workbook_() {
   const id = PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
-  if (!id) throw new Error("Run configureVerticalSlice() with the Shared Drive spreadsheet ID first.");
+  if (!id) throw new Error("Run configureVerticalSlice() with the new GCSD Drive spreadsheet ID first.");
   return SpreadsheetApp.openById(id);
 }
 
@@ -388,3 +423,5 @@ function parseJson_(value, fallback) { try { return typeof value === "string" ? 
 function list_(value, limit, max) { const items = Array.isArray(value) ? value : String(value || "").split(/\n|,/); return items.map(item => clean_(item, max)).filter(Boolean).slice(0, limit); }
 function menuFromText_(value) { return String(value || "").split(/\n|,/).map(name => ({ name: clean_(name, 300), required: 0 })).filter(item => item.name); }
 function isoDate_(value) { if (!value) return ""; const date = value instanceof Date ? value : new Date(value); return Number.isNaN(date.getTime()) ? clean_(value, 20) : Utilities.formatDate(date, "America/New_York", "yyyy-MM-dd"); }
+function googleId_(value, label) { const id = String(value || "").trim(); if (!/^[A-Za-z0-9_-]{20,}$/.test(id)) throw new Error(`${label} must be an ID copied from a Google URL, not the full URL.`); return id; }
+function normalizeEmails_(value) { return [...new Set(String(value || "").toLowerCase().split(",").map(email => email.trim()).filter(Boolean))].map(email => { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`Invalid allowed teacher email: ${email}`); return email; }); }

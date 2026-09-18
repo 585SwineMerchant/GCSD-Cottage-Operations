@@ -7,6 +7,7 @@
 - Service date, time, approved location, guest count, and service format
 - Menu and production quantities
 - Dietary requirements and allergen controls intended for production
+- Event-level learning focus and safety/sanitation controls
 - Generic team/station labels
 - Equipment, quality controls, deadlines, instructions, and handoffs
 - Publication revision and timestamp
@@ -22,4 +23,3 @@
 - Classroom grades or feedback
 
 The sanitizer constructs a new allowlisted object. It does not remove a few blocked fields from the private event record. Automated tests deliberately place private values in source records and confirm none survive publication.
-

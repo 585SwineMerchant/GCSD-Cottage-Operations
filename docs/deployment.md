@@ -7,18 +7,18 @@ No live resource should be created under another application's account, project,
 Use a consistent version-two prefix:
 
 - GitHub repository: `GCSD-Cottage-Operations`
-- Shared Drive folder: `GCSD Cottage Operations`
+- GCSD My Drive folder: `GCSD Cottage Operations`
 - Operational workbook: `GCSD Cottage Operations - Data`
 - Teacher Apps Script project: `GCSD Cottage Operations - Teacher`
 - Public Apps Script project: `GCSD Cottage Operations - Public Feed`
 - Request Form: `GCSD Culinary Event Request`
-- Generated-document folder: `Generated Event Documents`
+- Generated-document subfolder: `Generated Event Documents`
 
 ## Deployment sequence
 
 1. Create the new GitHub repository without importing another repository's history.
 2. Push this standalone repository to it.
-3. Create the Shared Drive folder, blank operational workbook, and generated-document subfolder.
+3. In the protected GCSD account's My Drive, create the new top-level folder, blank operational workbook, and generated-document subfolder.
 4. Create the teacher Apps Script project from `apps-script/teacher/`.
 5. Run `configureVerticalSlice(...)` using the new workbook and folder IDs.
 6. Run `createRequestForm()` once.
@@ -30,4 +30,4 @@ Use a consistent version-two prefix:
 12. Enable GitHub Pages from this repository's workflow.
 13. Run the proof: request → accept → draft → publish → student load → document.
 
-Detailed Apps Script setup is in [`../apps-script/README.md`](../apps-script/README.md).
+Detailed Apps Script setup is in [`../apps-script/README.md`](../apps-script/README.md). The focused protected-account checklist is [`weekend-google-setup.md`](weekend-google-setup.md).

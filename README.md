@@ -30,4 +30,4 @@ This repository is intentionally standalone. It does not share Git history, depl
 npm test
 ```
 
-See [deployment.md](docs/deployment.md) for the first live-pilot setup.
+Before Google setup, run `npm run check:google` to see what remains intentionally unconnected. See the [weekend Google setup](docs/weekend-google-setup.md) for the protected-account work and [deployment.md](docs/deployment.md) for the overall live-pilot sequence.
