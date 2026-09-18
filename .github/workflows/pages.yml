@@ -1,3 +1,4 @@
+# Standalone deployment for GCSD Cottage Operations version two.
 name: Deploy student site
 
 on:
