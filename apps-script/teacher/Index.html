@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{--green:#123f31;--green2:#286b50;--cream:#f5f0e5;--ink:#1f2924;--muted:#65736c;--line:#d8e0db;--gold:#bd8c2f;--danger:#9a4037}
+    *{box-sizing:border-box}body{margin:0;background:#edf1ee;color:var(--ink);font:15px/1.5 Arial,sans-serif}.top{background:var(--green);color:#fff;padding:18px clamp(18px,4vw,56px)}.top h1{margin:0;font:700 2rem Georgia,serif}.top p{margin:.25rem 0 0;opacity:.75}.shell{display:grid;grid-template-columns:360px minmax(0,1fr);gap:20px;padding:22px clamp(18px,4vw,56px)}.panel{background:#fff;border-radius:14px;padding:22px;box-shadow:0 10px 25px rgba(18,63,49,.08)}h2,h3{color:var(--green);font-family:Georgia,serif}.eyebrow{margin:0;color:var(--green2);font-weight:800;text-transform:uppercase;letter-spacing:.09em;font-size:.7rem}.request{border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:14px;margin:12px 0}.request h3{margin:.25rem 0}.request p{margin:.25rem 0;color:var(--muted)}button{border:0;border-radius:8px;padding:.72rem 1rem;font-weight:800;cursor:pointer}.primary{background:var(--green);color:#fff}.secondary{background:var(--cream);color:var(--green);border:1px solid var(--line)}button:disabled{opacity:.5;cursor:wait}label{display:block;font-size:.78rem;font-weight:800;color:#405047;margin:12px 0}input,textarea,select{display:block;width:100%;margin-top:5px;border:1px solid #bdc9c2;border-radius:7px;padding:.7rem;font:inherit}textarea{resize:vertical}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}.span2{grid-column:span 2}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.status{min-height:1.5rem;color:var(--muted)}.meta{background:var(--cream);border-radius:9px;padding:12px}.docs a{display:block;color:var(--green2);margin:.4rem 0}.empty{color:var(--muted);padding:18px;border:1px dashed var(--line);border-radius:9px}.loading{opacity:.65;pointer-events:none}@media(max-width:900px){.shell{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.span2{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header class="top"><h1>Teacher Command Center</h1><p>Google vertical slice · request → draft → publish → document</p></header>
+  <main class="shell" id="app">
+    <aside class="panel"><p class="eyebrow">Step 1</p><h2>Request inbox</h2><div id="requests"><p>Loading…</p></div></aside>
+    <section class="panel"><p class="eyebrow">Steps 2–5</p><h2>Event Order</h2>
+      <label>Working event<select id="eventSelect"><option value="">Choose an accepted request</option></select></label>
+      <form id="eventForm" hidden>
+        <input type="hidden" name="event_id">
+        <div class="grid">
+          <label>Event name<input name="event_name" required></label><label>Client display name<input name="client_display_name" required></label>
+          <label>Event type<input name="event_type"></label><label>School / site<input name="school"></label>
+          <label>Service date<input name="service_date" type="date" required></label><label>Service time<input name="service_time"></label>
+          <label>Location<input name="location"></label><label>Guests / orders<input name="guest_count" type="number" min="1" required></label>
+          <label class="span2">Service format<input name="service_format"></label>
+          <label class="span2">Customer commitment<textarea name="requirements" rows="3"></textarea></label>
+          <label class="span2">Dietary needs and allergen controls<textarea name="allergens" rows="3"></textarea></label>
+          <label class="span2">Menu · one item per line<textarea name="menu_text" rows="5" placeholder="Tomato soup | 80\nFocaccia | 100"></textarea></label>
+          <label class="span2">Production assignments · Team | Station | Product | Quantity | Deadline | Instructions<textarea name="tasks_text" rows="7" placeholder="Team A | Kitchen 1 | Tomato soup | 80 cups | 10:45 AM | Hold at 140°F or above"></textarea></label>
+        </div>
+        <div class="meta" id="eventMeta"></div>
+        <div class="actions"><button class="secondary" type="submit">Save draft</button><button class="primary" id="publish" type="button">Publish to students</button><button class="secondary" id="generate" type="button">Generate Event Order document</button></div>
+      </form>
+      <p class="status" id="status" aria-live="polite"></p><div class="docs" id="documents"></div>
+    </section>
+  </main>
+  <script>
+    const state={requests:[],events:[],documents:[],currentId:""};
+    const q=s=>document.querySelector(s), esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    function call(name,...args){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error.message||error)));runner[name](...args)});}
+    function busy(value){q("#app").classList.toggle("loading",value)}
+    function setStatus(message){q("#status").textContent=message||""}
+    function parseJson(value,fallback=[]){try{return JSON.parse(value||"null")||fallback}catch{return fallback}}
+    function menuText(event){return parseJson(event.menu_json).map(item=>[item.name,item.required||""].filter(Boolean).join(" | ")).join("\n")}
+    function tasksText(event){return parseJson(event.tasks_json).map(t=>[t.teamLabel,t.station,t.name,t.quantity,t.deadline,t.instructions].join(" | ")).join("\n")}
+    function parseMenu(text){return text.split(/\n+/).map(line=>{const [name,required]=line.split("|").map(v=>v.trim());return{name,required:Number(required)||0}}).filter(x=>x.name)}
+    function parseTasks(text){return text.split(/\n+/).map((line,i)=>{const [teamLabel,station,name,quantity,deadline,instructions]=line.split("|").map(v=>v.trim());return{id:`task-${i+1}`,teamLabel,station,name,quantity,deadline,instructions}}).filter(x=>x.name)}
+    function render(){
+      q("#requests").innerHTML=state.requests.filter(r=>r.status!=="Accepted").map(r=>`<article class="request"><span>${esc(r.status)}</span><h3>${esc(r.event_name)}</h3><p>${esc(r.requester)} · ${esc(r.service_date)} · ${esc(r.guest_count)} guests</p><p>${esc(r.requested_menu||"Menu not supplied")}</p><button class="primary" data-accept="${esc(r.request_id)}">Accept into draft</button></article>`).join("")||'<div class="empty">No open requests.</div>';
+      q("#eventSelect").innerHTML='<option value="">Choose an accepted request</option>'+state.events.map(e=>`<option value="${esc(e.event_id)}" ${e.event_id===state.currentId?"selected":""}>${esc(e.event_name)} · ${esc(e.stage)}</option>`).join("");
+      document.querySelectorAll("[data-accept]").forEach(b=>b.onclick=()=>accept(b.dataset.accept));
+      const event=state.events.find(e=>e.event_id===state.currentId); q("#eventForm").hidden=!event;
+      if(!event)return;
+      const f=q("#eventForm");["event_id","event_name","client_display_name","event_type","school","service_date","service_time","location","guest_count","service_format","requirements","allergens"].forEach(k=>f.elements[k].value=event[k]||"");
+      f.elements.menu_text.value=menuText(event);f.elements.tasks_text.value=tasksText(event);
+      q("#eventMeta").textContent=`${event.stage} · Revision ${event.revision||0}${event.published_at?` · Published ${new Date(event.published_at).toLocaleString()}`:" · Not yet published"}`;
+      q("#documents").innerHTML=state.documents.filter(d=>d.event_id===event.event_id).map(d=>`<a href="${esc(d.file_url)}" target="_blank" rel="noopener">Open ${esc(d.document_type)} · ${new Date(d.created_at).toLocaleString()}</a>`).join("");
+    }
+    async function load(select){busy(true);try{const data=await call("getDashboard");Object.assign(state,data);if(select)state.currentId=select;else if(!state.events.some(e=>e.event_id===state.currentId))state.currentId=state.events[0]?.event_id||"";render()}catch(e){setStatus(e.message)}finally{busy(false)}}
+    async function accept(id){busy(true);try{const event=await call("acceptRequest",id);state.currentId=event.event_id;await load(event.event_id);setStatus("Request accepted as a private draft.")}catch(e){setStatus(e.message)}finally{busy(false)}}
+    function formEvent(){const f=q("#eventForm"),data=Object.fromEntries(new FormData(f));data.menu=parseMenu(data.menu_text||"");data.tasks=parseTasks(data.tasks_text||"");return data}
+    q("#eventSelect").onchange=e=>{state.currentId=e.target.value;render()};
+    q("#eventForm").onsubmit=async e=>{e.preventDefault();busy(true);try{await call("saveEvent",formEvent());await load(state.currentId);setStatus("Draft saved. Students still see the last published revision.")}catch(err){setStatus(err.message)}finally{busy(false)}};
+    q("#publish").onclick=async()=>{busy(true);try{await call("saveEvent",formEvent());const result=await call("publishEvent",state.currentId);await load(state.currentId);setStatus(`Revision ${result.revision} published to the student snapshot.`)}catch(e){setStatus(e.message)}finally{busy(false)}};
+    q("#generate").onclick=async()=>{busy(true);try{await call("saveEvent",formEvent());const doc=await call("generateEventDocument",state.currentId);await load(state.currentId);setStatus("Event Order document generated.");window.open(doc.file_url,"_blank","noopener")}catch(e){setStatus(e.message)}finally{busy(false)}};
+    load();
+  </script>
+</body>
+</html>
