@@ -45,7 +45,7 @@ Review and approve only the Google permissions requested by this newly named pro
 
 ## 3. Create the request Form
 
-Run `createRequestForm()` once from the teacher Apps Script editor. Record the returned editing and published URLs. The function remembers the Form ID, so rerunning it returns the same Form instead of silently creating duplicates unless that Form was deleted or became inaccessible.
+Run `createRequestForm()` once from the teacher Apps Script editor. The Form is moved into the top-level `GCSD Cottage Operations` folder, and its editing and published URLs are printed in the execution log. Record both URLs. The function remembers the Form ID, so rerunning it returns the same Form instead of silently creating duplicates unless that Form was deleted or became inaccessible.
 
 Submit one clearly labeled test request. Confirm one row appears in `Requests` and that the row does not contain student information.
 
