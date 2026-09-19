@@ -1,4 +1,4 @@
-# Google vertical slice
+# Google-backed Command Center
 
 This folder contains the first complete Google-backed workflow for GCSD Cottage Operations:
 
@@ -100,8 +100,18 @@ The student page performs one request when opened. It does not poll. **Refresh E
 8. Click **Generate Event Order document** and confirm the Doc appears in the configured GCSD My Drive folder.
 9. Confirm the public payload contains no request contact details, budget, internal notes, student identity, roster, or staff audit data.
 
-## Current vertical-slice boundaries
+## Current foundation
 
-This proves the new infrastructure before the full command center is ported. It includes the request inbox, core Event Order fields, generic production assignments, controlled publication, student display, and one operational document. Menu scaling, purchasing, the full production planner, budgets, closeout, archive, and Recipe Studio import remain version-two migration stages after this gate passes.
+The protected application now includes the operations dashboard, full request queue, event workspaces, separate operational/publication states, structured validation, publication preview and immutable history, unpublish/republish, clone, archive/restore, document history, and event audit history. Menu scaling, recipe-library management, purchasing, the full production planner, budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
+
+## Upgrade an existing pilot workbook
+
+After replacing the teacher project files, run this once before creating the new deployment version:
+
+```javascript
+initializeWorkbook();
+```
+
+The migration accepts the existing managed headers as an exact prefix, appends the new columns, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
 
 For a click-by-click protected-account session, use [`../docs/weekend-google-setup.md`](../docs/weekend-google-setup.md).

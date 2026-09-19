@@ -1,4 +1,4 @@
-# Vertical-slice deployment
+# Deployment
 
 No live resource should be created under another application's account, project, Worker, database, repository, or deployment configuration.
 
@@ -31,3 +31,17 @@ Use a consistent version-two prefix:
 13. Run the proof: request → accept → draft → publish → student load → document.
 
 Detailed Apps Script setup is in [`../apps-script/README.md`](../apps-script/README.md). The focused protected-account checklist is [`weekend-google-setup.md`](weekend-google-setup.md).
+
+## Updating the live pilot to the Command Center foundation
+
+The GitHub repository and Apps Script deployments are separate release targets. After this source is merged:
+
+1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. In the teacher Apps Script editor, run `initializeWorkbook()` once. It appends the lifecycle/publication columns to `Events` and `Publications`; it does not rearrange or delete existing data.
+3. Choose **Deploy → Manage deployments → Edit**, select **New version**, and deploy the teacher web app without changing its GCSD-domain access policy.
+4. Replace the public-feed project's `Code.gs` with the repository version.
+5. Create a new version of the existing public-feed deployment without changing its anonymous read-only access policy or `/exec` URL.
+6. Open the teacher `/exec` URL and verify the Dashboard, Requests, and Events views.
+7. Use the existing test event to verify preview, unpublish, manual student refresh, republish, clone, archive, and restore. Do not archive the published source event until it has been explicitly unpublished.
+
+The public site does not need a configuration change because both existing `/exec` URLs remain the same. Students see an unpublish or republish only after pressing **Refresh Event Data** or reopening the page.

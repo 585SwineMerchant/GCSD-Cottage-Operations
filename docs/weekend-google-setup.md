@@ -9,6 +9,10 @@ This is the only work that must be completed while signed into the protected GCS
 - Keep [`google-resource-register.md`](google-resource-register.md) open and record each new URL as it is created.
 - If a district policy blocks a required option, stop at that step. Do not change sharing on the teacher application to work around it.
 
+## Existing-pilot update
+
+If the original vertical slice is already deployed, do not create replacement Google resources. Follow the update sequence in [`deployment.md`](deployment.md): replace the two Apps Script source sets, run `initializeWorkbook()` in the teacher project, and create new versions of the existing teacher and public-feed deployments. Keep their current access settings and `/exec` URLs.
+
 ## 1. Create the GCSD My Drive resources
 
 In the GCSD account's **My Drive**, create this exact structure:

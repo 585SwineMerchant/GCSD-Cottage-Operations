@@ -20,6 +20,7 @@ function fakeAppsScript() {
   class Sheet {
     constructor(name) { this.name = name; this.rows = []; }
     getLastRow() { return this.rows.length; }
+    getLastColumn() { return this.rows.reduce((max, row) => Math.max(max, row.length), 0); }
     getRange(row, column, rows = 1, columns = 1) { return new Range(this, row, column, rows, columns); }
     appendRow(row) { this.rows.push([...row]); }
     setFrozenRows() {}
@@ -51,6 +52,23 @@ function fakeAppsScript() {
       },
       DriveApp: { getFileById: () => ({ moveTo() {} }), getFolderById: id => ({ id }) }
     }
+  };
+}
+
+function operationalEvent(overrides = {}) {
+  const now = "2026-09-19T12:00:00.000Z";
+  return {
+    event_id: "evt-test", request_id: "", event_name: "Operational Test", event_type: "Catering",
+    school: "Arcadia", client_display_name: "GCSD Client", service_date: "2026-10-10",
+    service_time: "10:00 AM", location: "Arcadia High School", guest_count: 40,
+    service_format: "Pickup", requirements: "Ready at 9:45", allergens: "None declared",
+    learning_focus: "Communication", safety_controls: "Prevent cross-contact",
+    menu_json: JSON.stringify([{ name: "Soup", required: 40 }]),
+    tasks_json: JSON.stringify([{ teamLabel: "Team A", station: "Kitchen 1", name: "Soup", quantity: "40", deadline: "9:30", instructions: "Prepare and hold", equipment: ["stockpot"], qualityControls: ["temperature"], handoff: "Service team" }]),
+    stage: "Draft", revision: 0, published_at: "", published_by: "", created_at: now,
+    updated_at: now, updated_by: "teacher@greececsd.org", lifecycle_status: "Planning",
+    publication_status: "Never published", unpublished_at: "", unpublished_by: "",
+    archived_at: "", archived_by: "", source_event_id: "", ...overrides
   };
 }
 
@@ -214,4 +232,97 @@ test("request acceptance, draft save, publication, and document generation compl
   assert.equal(context.records_("Requests")[0].status, "Accepted");
   assert.equal(context.records_("Publications").length, 1);
   assert.equal(context.records_("Documents").length, 1);
+});
+
+test("legacy workbook headers migrate append-only and the migration is idempotent", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  const currentHeaders = Array.from(vm.runInContext("HEADERS.Events", context));
+  const legacyHeaders = currentHeaders.slice(0, 24);
+  const legacy = fake.book.insertSheet("Events");
+  const legacyRow = legacyHeaders.map(header => header === "event_id" ? "evt-legacy" : header === "event_name" ? "Legacy Event" : "");
+  legacy.rows = [legacyHeaders, legacyRow];
+
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const firstHeaders = [...legacy.rows[0]];
+  const firstRow = [...legacy.rows[1]];
+  context.initializeWorkbook();
+
+  assert.deepEqual(firstHeaders, currentHeaders);
+  assert.deepEqual(legacy.rows[0], firstHeaders);
+  assert.equal(firstRow[0], "evt-legacy");
+  assert.equal(firstRow[2], "Legacy Event");
+});
+
+test("unpublish uses the latest complete snapshot and later publishes do not resurrect removed events", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-a", event_name: "Event A" }));
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-b", event_name: "Event B", service_date: "2026-10-11" }));
+
+  context.publishEvent("evt-a");
+  context.publishEvent("evt-b");
+  const immutableBefore = context.records_("Publications").map(row => row.snapshot_json);
+  assert.throws(() => context.unpublishEvent("evt-a", ""), /reason is required/);
+  context.unpublishEvent("evt-a", "Schedule changed");
+  const eventB = context.findRecord_("Events", "event_id", "evt-b");
+  context.saveEvent({ ...eventB, event_name: "Event B revised", menu: context.parseJson_(eventB.menu_json, []), tasks: context.parseJson_(eventB.tasks_json, []) });
+  context.publishEvent("evt-b");
+
+  const latest = context.latestSnapshot_();
+  assert.deepEqual(Array.from(latest.events, event => event.id), ["evt-b"]);
+  assert.deepEqual(context.records_("Publications").slice(0, 2).map(row => row.snapshot_json), immutableBefore);
+  assert.equal(context.findRecord_("Events", "event_id", "evt-a").publication_status, "Unpublished");
+  assert.equal(context.records_("Publications").at(-2).action, "unpublish");
+});
+
+test("republish, archive, restore, and clone preserve private history and safe state", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-life" }));
+  context.publishEvent("evt-life");
+  context.unpublishEvent("evt-life", "Event postponed");
+  const republished = context.publishEvent("evt-life");
+  assert.equal(republished.revision, 2);
+  assert.equal(context.records_("Publications").at(-1).action, "republish");
+
+  assert.throws(() => context.archiveEvent("evt-life", "Completed"), /student site before archiving/);
+  context.unpublishEvent("evt-life", "Service completed");
+  context.archiveEvent("evt-life", "Closeout complete");
+  assert.throws(() => context.saveEvent({ event_id: "evt-life" }), /Restore this event/);
+  context.restoreEvent("evt-life");
+  const restored = context.findRecord_("Events", "event_id", "evt-life");
+  assert.equal(restored.lifecycle_status, "Planning");
+  assert.equal(restored.publication_status, "Unpublished");
+
+  const clone = context.cloneEvent("evt-life");
+  assert.notEqual(clone.event_id, "evt-life");
+  assert.equal(clone.source_event_id, "evt-life");
+  assert.equal(clone.service_date, "");
+  assert.equal(Number(clone.revision), 0);
+  assert.equal(clone.publication_status, "Never published");
+  assert.equal(context.records_("Documents").filter(row => row.event_id === clone.event_id).length, 0);
+  assert.equal(context.records_("Publications").filter(row => row.event_id === clone.event_id).length, 0);
+});
+
+test("dashboard foundation exposes separate lifecycle, publication, validation, and accessible controls", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-valid" }));
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-invalid", event_name: "", menu_json: "[]" }));
+  const dashboard = context.getDashboard();
+  assert.equal(dashboard.events.length, 2);
+  assert.equal(dashboard.summary.attention, 1);
+  assert.equal(dashboard.events.find(event => event.event_id === "evt-invalid").publication_issues.length, 2);
+
+  const html = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  ["dashboardView", "requestsView", "eventsView", "eventWorkspace", "previewDialog", "unpublishDialog", "archiveDialog", "globalStatus"].forEach(id => assert.match(html, new RegExp(`id="${id}"`)));
+  assert.match(html, /lang="en"/);
+  assert.match(html, /Skip to main content/);
+  assert.match(html, /unpublishEvent/);
+  assert.match(html, /archiveEvent/);
+  assert.match(html, /cloneEvent/);
 });

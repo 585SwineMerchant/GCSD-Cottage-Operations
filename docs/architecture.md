@@ -24,10 +24,35 @@
 8. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
 9. The teacher application generates operational Google documents into the configured GCSD Drive folder.
 
+## Event state model
+
+Operational lifecycle and student visibility are deliberately separate:
+
+| Concern | Values | Meaning |
+|---|---|---|
+| Operational lifecycle | `Planning`, `Ready`, `Completed`, `Archived` | Where staff are in the event-management process |
+| Publication status | `Never published`, `Published`, `Revised draft`, `Unpublished` | What the current student snapshot contains |
+
+Unpublishing appends a new immutable global snapshot without the event. It never deletes the Event or an earlier publication. Republish creates a new event revision. A published event must be explicitly removed from the student site before it can be archived, and restore never republishes it automatically.
+
+Each publication row contains a complete sanitized student snapshot. New publications begin from the newest complete snapshot; they do not reconstruct visibility from historical per-event rows. This prevents an unpublished event from reappearing when another event is later published.
+
+## Command Center foundation
+
+The protected teacher application is organized into:
+
+- Dashboard metrics, upcoming events, and planning warnings
+- Request queue with explicit acceptance and decline review
+- Event workspaces for overview, source request, menu/production, documents, publication, and audit
+- Structured publication blockers and warnings
+- Preview, publish/revise, unpublish, republish, clone, archive, and restore controls
+
+Workbook schema changes are append-only. `initializeWorkbook()` validates that managed columns remain in their original order and appends only missing version-two columns, leaving all existing rows and publication snapshots intact.
+
 ## Scale decision
 
 The manual load-and-refresh model avoids automatic polling. A class opening the site creates one short read per device; ordinary navigation occurs entirely in the browser. Teacher writes and document generation are small, deliberate operations protected by Apps Script locking.
 
 ## Phase boundaries
 
-The first slice proves infrastructure and privacy. Later phases will port, in order, menu/recipe management, scaling and costing, purchasing, production planning, Kitchen Management documents, budgets and inventory, closeout/archive, and Recipe Studio export/import.
+The infrastructure, privacy gate, and Command Center foundation are complete in source. Later phases will port, in order, menu/recipe management, scaling and costing, purchasing, the full production planner, Kitchen Management documents, budgets and inventory, operational closeout, and Recipe Studio export/import.

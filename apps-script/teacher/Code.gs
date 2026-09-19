@@ -7,11 +7,13 @@ const SHEETS = Object.freeze({
 });
 
 const REQUEST_REVIEW_STATUSES = Object.freeze(["New", "Under Review", "Needs Information", "Declined"]);
+const EVENT_LIFECYCLE_STATUSES = Object.freeze(["Planning", "Ready", "Completed"]);
+const PUBLICATION_STATUSES = Object.freeze(["Never published", "Published", "Revised draft", "Unpublished"]);
 
 const HEADERS = Object.freeze({
   Requests: ["request_id", "submitted_at", "requester", "contact_name", "contact_email", "contact_phone", "event_name", "event_type", "school", "service_date", "service_time", "guest_count", "service_format", "requested_menu", "requirements", "allergens", "internal_notes", "status", "event_id", "updated_at"],
-  Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by"],
-  Publications: ["publication_id", "event_id", "revision", "published_at", "published_by", "snapshot_json"],
+  Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by", "lifecycle_status", "publication_status", "unpublished_at", "unpublished_by", "archived_at", "archived_by", "source_event_id"],
+  Publications: ["publication_id", "event_id", "revision", "published_at", "published_by", "snapshot_json", "action", "reason"],
   Documents: ["document_id", "event_id", "document_type", "file_id", "file_url", "created_at", "created_by"],
   Audit: ["audit_id", "occurred_at", "actor", "action", "record_type", "record_id", "detail_json"]
 });
@@ -63,10 +65,20 @@ function initializeWorkbook_() {
   Object.keys(HEADERS).forEach(name => {
     const sheet = book.getSheetByName(name) || book.insertSheet(name);
     const headers = HEADERS[name];
-    if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    const actual = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    if (headers.some((header, index) => actual[index] !== header)) {
-      throw new Error(`${name} has unexpected columns. Expected: ${headers.join(", ")}`);
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    } else {
+      const width = typeof sheet.getLastColumn === "function" ? sheet.getLastColumn() : headers.length;
+      const actual = sheet.getRange(1, 1, 1, Math.max(width, 1)).getValues()[0];
+      while (actual.length && !String(actual[actual.length - 1] || "").trim()) actual.pop();
+      const prefixMatches = actual.every((header, index) => header === headers[index]);
+      if (!prefixMatches || actual.length > headers.length) {
+        throw new Error(`${name} has unexpected columns. Expected the managed columns in their original order.`);
+      }
+      if (actual.length < headers.length) {
+        const missing = headers.slice(actual.length);
+        sheet.getRange(1, actual.length + 1, 1, missing.length).setValues([missing]);
+      }
     }
     sheet.setFrozenRows(1);
   });
@@ -148,11 +160,38 @@ function onRequestFormSubmit(event) {
 
 function getDashboard() {
   const teacher = assertTeacher_();
+  const events = records_(SHEETS.EVENTS)
+    .map(event => enrichEvent_(event))
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  const publications = records_(SHEETS.PUBLICATIONS)
+    .sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))
+    .map(({ snapshot_json, ...publication }) => publication);
   return {
     teacher,
     requests: records_(SHEETS.REQUESTS).sort((a, b) => String(b.submitted_at).localeCompare(String(a.submitted_at))),
-    events: records_(SHEETS.EVENTS).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))),
-    documents: records_(SHEETS.DOCUMENTS).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    events,
+    publications,
+    documents: records_(SHEETS.DOCUMENTS).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+    summary: dashboardSummary_(events)
+  };
+}
+
+function getEventWorkspace(eventId) {
+  assertTeacher_();
+  const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+  if (!event) throw new Error("Event not found.");
+  const publications = records_(SHEETS.PUBLICATIONS)
+    .filter(item => String(item.event_id) === String(eventId))
+    .sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))
+    .map(({ snapshot_json, ...item }) => item);
+  return {
+    event: enrichEvent_(event),
+    sourceRequest: event.request_id ? findRecord_(SHEETS.REQUESTS, "request_id", event.request_id) : null,
+    documents: records_(SHEETS.DOCUMENTS).filter(item => String(item.event_id) === String(eventId)),
+    publications,
+    audit: records_(SHEETS.AUDIT)
+      .filter(item => String(item.record_id) === String(eventId) || String(parseJson_(item.detail_json, {}).eventId || "") === String(eventId))
+      .sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)))
   };
 }
 
@@ -197,7 +236,9 @@ function acceptRequest(requestId, reviewNote) {
       learning_focus: "", safety_controls: "",
       menu_json: JSON.stringify(menuFromText_(request.requested_menu)), tasks_json: "[]",
       stage: "Draft", revision: 0, published_at: "", published_by: "",
-      created_at: now, updated_at: now, updated_by: teacher.email
+      created_at: now, updated_at: now, updated_by: teacher.email,
+      lifecycle_status: "Planning", publication_status: "Never published",
+      unpublished_at: "", unpublished_by: "", archived_at: "", archived_by: "", source_event_id: ""
     };
     appendRecord_(SHEETS.EVENTS, event);
     updateRecord_(SHEETS.REQUESTS, "request_id", requestId, {
@@ -215,6 +256,7 @@ function saveEvent(input) {
   return withLock_(() => {
     const existing = findRecord_(SHEETS.EVENTS, "event_id", input.event_id);
     if (!existing) throw new Error("Event not found.");
+    if (eventLifecycle_(existing) === "Archived") throw new Error("Restore this event before editing it.");
     const now = new Date().toISOString();
     const patch = {
       event_name: clean_(input.event_name, 200),
@@ -235,7 +277,9 @@ function saveEvent(input) {
     };
     const changed = Object.keys(patch).some(field => String(existing[field] || "") !== String(patch[field] || ""));
     if (!changed) return existing;
-    patch.stage = existing.published_at ? "Revised draft" : "Draft";
+    const currentPublication = publicationStatus_(existing);
+    patch.publication_status = currentPublication === "Published" ? "Revised draft" : currentPublication;
+    patch.stage = displayStage_(eventLifecycle_(existing), patch.publication_status);
     patch.updated_at = now;
     patch.updated_by = teacher.email;
     updateRecord_(SHEETS.EVENTS, "event_id", input.event_id, patch);
@@ -249,32 +293,169 @@ function publishEvent(eventId) {
   return withLock_(() => {
     const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
     if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before publishing it.");
+    if (publicationStatus_(event) === "Published" && event.stage === "Published") {
+      throw new Error("This published revision is already current. Make a change before publishing a new revision.");
+    }
     const issues = publicationIssues_(event);
     if (issues.length) throw new Error(`Cannot publish: ${issues.join("; ")}`);
     const revision = Number(event.revision || 0) + 1;
     const publishedAt = new Date().toISOString();
     const publicEvent = sanitizePublicEvent_(Object.assign({}, event, { revision, published_at: publishedAt }));
-    const publishedEvents = latestPublishedEvents_().filter(item => item.id !== publicEvent.id);
+    const publishedEvents = latestSnapshot_().events.filter(item => item.id !== publicEvent.id);
     publishedEvents.push(publicEvent);
     publishedEvents.sort((a, b) => String(a.serviceDate || "").localeCompare(String(b.serviceDate || "")));
+    const publicationSequence = records_(SHEETS.PUBLICATIONS).length + 1;
+    const action = publicationStatus_(event) === "Unpublished" ? "republish" : (Number(event.revision || 0) ? "revise" : "publish");
     const publication = {
       publication_id: id_("pub"), event_id: eventId, revision,
       published_at: publishedAt, published_by: teacher.email,
       snapshot_json: JSON.stringify({
-        schemaVersion: 1,
-        revision,
+        schemaVersion: 2,
+        revision: publicationSequence,
+        publicationSequence,
         publishedAt,
         events: publishedEvents,
-        yearArchive: []
-      })
+        yearArchive: [],
+        action
+      }),
+      action, reason: ""
     };
+    assertSnapshotFits_(publication.snapshot_json);
     appendRecord_(SHEETS.PUBLICATIONS, publication);
     updateRecord_(SHEETS.EVENTS, "event_id", eventId, {
       stage: "Published", revision, published_at: publishedAt,
-      published_by: teacher.email, updated_at: publishedAt, updated_by: teacher.email
+      published_by: teacher.email, publication_status: "Published",
+      unpublished_at: "", unpublished_by: "", updated_at: publishedAt, updated_by: teacher.email
     });
-    audit_(teacher.email, "publish", "event", eventId, { revision, publicationId: publication.publication_id });
+    audit_(teacher.email, action, "event", eventId, { revision, publicationId: publication.publication_id });
     return { ok: true, revision, publishedAt, snapshot: JSON.parse(publication.snapshot_json) };
+  });
+}
+
+function getPublicationPreview(eventId) {
+  assertTeacher_();
+  const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+  if (!event) throw new Error("Event not found.");
+  return {
+    event: sanitizePublicEvent_(event),
+    issues: publicationIssues_(event),
+    nextRevision: Number(event.revision || 0) + 1,
+    excluded: ["request contact information", "private review notes", "budgets and supplier data", "student identities and academic records", "staff audit details"]
+  };
+}
+
+function unpublishEvent(eventId, reason) {
+  const teacher = assertTeacher_();
+  const explanation = clean_(reason, 1000);
+  if (!explanation) throw new Error("A reason is required to remove an event from the student site.");
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    if (publicationStatus_(event) !== "Published") throw new Error("Only a currently published event can be removed from the student site.");
+    const changedAt = new Date().toISOString();
+    const snapshot = latestSnapshot_();
+    const publishedEvents = snapshot.events.filter(item => String(item.id) !== String(eventId));
+    const publicationSequence = records_(SHEETS.PUBLICATIONS).length + 1;
+    const publication = {
+      publication_id: id_("pub"), event_id: eventId, revision: Number(event.revision || 0),
+      published_at: changedAt, published_by: teacher.email,
+      snapshot_json: JSON.stringify({
+        schemaVersion: 2, revision: publicationSequence, publicationSequence,
+        publishedAt: changedAt, events: publishedEvents, yearArchive: [], action: "unpublish"
+      }),
+      action: "unpublish", reason: explanation
+    };
+    assertSnapshotFits_(publication.snapshot_json);
+    appendRecord_(SHEETS.PUBLICATIONS, publication);
+    updateRecord_(SHEETS.EVENTS, "event_id", eventId, {
+      stage: "Unpublished", publication_status: "Unpublished",
+      unpublished_at: changedAt, unpublished_by: teacher.email,
+      updated_at: changedAt, updated_by: teacher.email
+    });
+    audit_(teacher.email, "unpublish", "event", eventId, { reason: explanation, publicationId: publication.publication_id });
+    return { ok: true, unpublishedAt: changedAt, snapshot: JSON.parse(publication.snapshot_json) };
+  });
+}
+
+function setEventLifecycle(eventId, lifecycleStatus) {
+  const teacher = assertTeacher_();
+  const status = clean_(lifecycleStatus, 100);
+  if (!EVENT_LIFECYCLE_STATUSES.includes(status)) throw new Error("Invalid event lifecycle status.");
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before changing its status.");
+    if (status === "Ready") {
+      const issues = publicationIssues_(event);
+      if (issues.length) throw new Error(`Cannot mark ready: ${issues.join("; ")}`);
+    }
+    const now = new Date().toISOString();
+    const publicationStatus = publicationStatus_(event);
+    updateRecord_(SHEETS.EVENTS, "event_id", eventId, {
+      lifecycle_status: status,
+      stage: displayStage_(status, publicationStatus),
+      updated_at: now, updated_by: teacher.email
+    });
+    audit_(teacher.email, "lifecycle", "event", eventId, { lifecycleStatus: status });
+    return enrichEvent_(findRecord_(SHEETS.EVENTS, "event_id", eventId));
+  });
+}
+
+function archiveEvent(eventId, reason) {
+  const teacher = assertTeacher_();
+  const explanation = clean_(reason, 1000);
+  if (!explanation) throw new Error("An archive reason is required.");
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    if (publicationStatus_(event) === "Published") throw new Error("Remove this event from the student site before archiving it.");
+    if (eventLifecycle_(event) === "Archived") return enrichEvent_(event);
+    const now = new Date().toISOString();
+    updateRecord_(SHEETS.EVENTS, "event_id", eventId, {
+      lifecycle_status: "Archived", stage: "Archived", archived_at: now,
+      archived_by: teacher.email, updated_at: now, updated_by: teacher.email
+    });
+    audit_(teacher.email, "archive", "event", eventId, { reason: explanation });
+    return enrichEvent_(findRecord_(SHEETS.EVENTS, "event_id", eventId));
+  });
+}
+
+function restoreEvent(eventId) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) !== "Archived") throw new Error("Only an archived event can be restored.");
+    const now = new Date().toISOString();
+    const publicationStatus = publicationStatus_(event);
+    updateRecord_(SHEETS.EVENTS, "event_id", eventId, {
+      lifecycle_status: "Planning", stage: displayStage_("Planning", publicationStatus),
+      archived_at: "", archived_by: "", updated_at: now, updated_by: teacher.email
+    });
+    audit_(teacher.email, "restore", "event", eventId, {});
+    return enrichEvent_(findRecord_(SHEETS.EVENTS, "event_id", eventId));
+  });
+}
+
+function cloneEvent(eventId) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const source = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!source) throw new Error("Event not found.");
+    const now = new Date().toISOString();
+    const clone = {};
+    HEADERS.Events.forEach(field => { clone[field] = source[field] || ""; });
+    Object.assign(clone, {
+      event_id: id_("evt"), request_id: "", event_name: `${source.event_name} (Copy)`, service_date: "",
+      stage: "Draft", revision: 0, published_at: "", published_by: "", created_at: now,
+      updated_at: now, updated_by: teacher.email, lifecycle_status: "Planning",
+      publication_status: "Never published", unpublished_at: "", unpublished_by: "",
+      archived_at: "", archived_by: "", source_event_id: source.event_id
+    });
+    appendRecord_(SHEETS.EVENTS, clone);
+    audit_(teacher.email, "clone", "event", clone.event_id, { sourceEventId: source.event_id });
+    return enrichEvent_(clone);
   });
 }
 
@@ -282,6 +463,7 @@ function generateEventDocument(eventId) {
   const teacher = assertTeacher_();
   const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
   if (!event) throw new Error("Event not found.");
+  if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before generating documents.");
   const doc = DocumentApp.create(`${event.event_name} · Event Order v${Number(event.revision || 0)}`);
   const body = doc.getBody();
   body.appendParagraph("GCSD CULINARY PATHWAY").setHeading(DocumentApp.ParagraphHeading.SUBTITLE);
@@ -372,26 +554,105 @@ function normalizeTasks_(tasks) {
 }
 
 function publicationIssues_(event) {
-  const issues = [];
-  if (!String(event.event_name || "").trim()) issues.push("event name is missing");
-  if (!String(event.client_display_name || "").trim()) issues.push("client display name is missing");
-  if (!String(event.service_date || "").trim()) issues.push("service date is missing");
-  if (!positiveInteger_(event.guest_count, 0)) issues.push("guest count must be greater than zero");
-  if (!normalizeMenu_(parseJson_(event.menu_json, [])).length) issues.push("menu is empty");
-  if (!normalizeTasks_(parseJson_(event.tasks_json, [])).length) issues.push("production assignments are empty");
-  return issues;
+  return validateEventForPublication_(event).issues.map(issue => issue.message);
 }
 
-function latestPublishedEvents_() {
-  const latest = {};
-  records_(SHEETS.PUBLICATIONS)
-    .sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)))
-    .forEach(publication => {
-      const snapshot = parseJson_(publication.snapshot_json, {});
-      const event = Array.isArray(snapshot.events) ? snapshot.events.find(item => String(item.id) === String(publication.event_id)) : null;
-      if (event) latest[publication.event_id] = event;
-    });
-  return Object.keys(latest).map(id => latest[id]);
+function validateEventForPublication(eventId) {
+  assertTeacher_();
+  const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+  if (!event) throw new Error("Event not found.");
+  return validateEventForPublication_(event);
+}
+
+function validateEventForPublication_(event) {
+  const issues = [];
+  const warnings = [];
+  const issue = (code, field, message) => issues.push({ code, field, message });
+  const warn = (code, field, message) => warnings.push({ code, field, message });
+  if (eventLifecycle_(event) === "Archived") issue("archived", "lifecycle_status", "event is archived");
+  if (!String(event.event_name || "").trim()) issue("missing_event_name", "event_name", "event name is missing");
+  if (!String(event.client_display_name || "").trim()) issue("missing_client_name", "client_display_name", "client display name is missing");
+  if (!String(event.service_date || "").trim()) issue("missing_service_date", "service_date", "service date is missing");
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(String(event.service_date))) issue("invalid_service_date", "service_date", "service date must use YYYY-MM-DD");
+  if (!positiveInteger_(event.guest_count, 0)) issue("invalid_guest_count", "guest_count", "guest count must be greater than zero");
+  const menu = normalizeMenu_(parseJson_(event.menu_json, []));
+  const tasks = normalizeTasks_(parseJson_(event.tasks_json, []));
+  if (!menu.length) issue("missing_menu", "menu_text", "menu is empty");
+  if (!tasks.length) issue("missing_tasks", "tasks_text", "production assignments are empty");
+  if (!String(event.service_time || "").trim()) warn("missing_service_time", "service_time", "Service time has not been recorded.");
+  if (!String(event.location || event.school || "").trim()) warn("missing_location", "location", "Service location has not been recorded.");
+  if (!String(event.learning_focus || "").trim()) warn("missing_learning_focus", "learning_focus", "Learning focus has not been recorded.");
+  if (!String(event.safety_controls || "").trim()) warn("missing_safety_controls", "safety_controls", "Safety and sanitation controls have not been recorded.");
+  if (!String(event.allergens || "").trim()) warn("missing_allergen_statement", "allergens", "An allergen statement has not been recorded.");
+  return { valid: issues.length === 0, issues, warnings };
+}
+
+function latestSnapshot_() {
+  const publications = records_(SHEETS.PUBLICATIONS)
+    .sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)) || Number(a._row || 0) - Number(b._row || 0));
+  if (!publications.length) return { schemaVersion: 2, revision: 0, publicationSequence: 0, publishedAt: "", events: [], yearArchive: [] };
+  const snapshot = parseJson_(publications[publications.length - 1].snapshot_json, {});
+  return snapshot && Array.isArray(snapshot.events) ? snapshot : { schemaVersion: 2, revision: 0, publicationSequence: 0, publishedAt: "", events: [], yearArchive: [] };
+}
+
+function eventLifecycle_(event) {
+  const value = String(event.lifecycle_status || "");
+  if (["Planning", "Ready", "Completed", "Archived"].includes(value)) return value;
+  if (String(event.stage) === "Archived") return "Archived";
+  if (String(event.stage) === "Completed") return "Completed";
+  if (String(event.stage) === "Ready") return "Ready";
+  return "Planning";
+}
+
+function publicationStatus_(event) {
+  const value = String(event.publication_status || "");
+  if (PUBLICATION_STATUSES.includes(value)) return value;
+  if (String(event.stage) === "Revised draft") return "Revised draft";
+  if (String(event.stage) === "Unpublished") return "Unpublished";
+  if (String(event.stage) === "Published") return "Published";
+  return event.published_at ? "Published" : "Never published";
+}
+
+function displayStage_(lifecycleStatus, publicationStatus) {
+  if (lifecycleStatus === "Archived") return "Archived";
+  if (["Published", "Revised draft", "Unpublished"].includes(publicationStatus)) return publicationStatus;
+  if (["Ready", "Completed"].includes(lifecycleStatus)) return lifecycleStatus;
+  return "Draft";
+}
+
+function enrichEvent_(event) {
+  const validation = validateEventForPublication_(event);
+  return Object.assign({}, event, {
+    lifecycle_status: eventLifecycle_(event),
+    publication_status: publicationStatus_(event),
+    publication_issues: validation.issues,
+    publication_warnings: validation.warnings
+  });
+}
+
+function dashboardSummary_(events) {
+  const requests = records_(SHEETS.REQUESTS);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const soon = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+  return {
+    openRequests: requests.filter(item => !["Accepted", "Declined"].includes(item.status)).length,
+    needsInformation: requests.filter(item => item.status === "Needs Information").length,
+    upcoming: events.filter(item => {
+      if (item.lifecycle_status === "Archived" || !item.service_date) return false;
+      const date = new Date(`${item.service_date}T00:00:00`);
+      return !Number.isNaN(date.getTime()) && date >= today && date <= soon;
+    }).length,
+    attention: events.filter(item => item.lifecycle_status !== "Archived" && item.publication_issues.length).length,
+    published: events.filter(item => item.publication_status === "Published").length,
+    revised: events.filter(item => item.publication_status === "Revised draft").length,
+    unpublished: events.filter(item => item.publication_status === "Unpublished").length,
+    archived: events.filter(item => item.lifecycle_status === "Archived").length
+  };
+}
+
+function assertSnapshotFits_(json) {
+  if (String(json || "").length > 45000) throw new Error("The public snapshot is too large for one Google Sheets cell. Archive older public events before publishing.");
 }
 
 function workbook_() {

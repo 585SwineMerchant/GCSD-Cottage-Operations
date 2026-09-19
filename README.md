@@ -4,9 +4,11 @@ Independent version-two application for managing GCSD Culinary Pathway client ev
 
 This repository is intentionally standalone. It does not share Git history, deployment configuration, databases, Workers, secrets, or authentication with the version-one Advanced Culinary package or with any personal application.
 
-## Current vertical slice
+## Current foundation
 
 `Google Form request → protected teacher application → private Event Order draft → deliberate publication → read-only student site → generated Google Event Order document`
+
+The Teacher Command Center now includes a responsive operations dashboard, request queue, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, and event audit history.
 
 ## Repository boundaries
 
@@ -14,7 +16,7 @@ This repository is intentionally standalone. It does not share Git history, depl
 - `apps-script/public-feed/` — separate anonymous deployment that can only return sanitized publication snapshots
 - `site/` — independent GitHub Pages student application; read-only, no authentication, no student identity, no automatic polling
 - `docs/` — architecture, privacy, naming, and deployment decisions
-- `tests/` — privacy, deployment-separation, read-only behavior, and end-to-end vertical-slice tests
+- `tests/` — privacy, schema migration, lifecycle, publication history, public-feed, deployment-separation, read-only behavior, and end-to-end workflow tests
 
 ## Non-negotiable separation
 
