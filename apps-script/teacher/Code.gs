@@ -77,7 +77,9 @@ function createRequestForm() {
   if (existingId) {
     try {
       const existing = FormApp.openById(existingId);
-      return { id: existing.getId(), editUrl: existing.getEditUrl(), publishedUrl: existing.getPublishedUrl(), existing: true };
+      const result = { id: existing.getId(), editUrl: existing.getEditUrl(), publishedUrl: existing.getPublishedUrl(), existing: true };
+      console.log(JSON.stringify(result));
+      return result;
     } catch (_) {
       // The saved form was removed or access changed; create a replacement below.
     }
@@ -99,8 +101,15 @@ function createRequestForm() {
   form.addParagraphTextItem().setTitle("Service requirements");
   form.addParagraphTextItem().setTitle("Dietary needs and allergens");
   ScriptApp.newTrigger("onRequestFormSubmit").forForm(form).onFormSubmit().create();
+  const documentFolderId = props.getProperty("DOCUMENT_FOLDER_ID");
+  if (documentFolderId) {
+    const parents = DriveApp.getFolderById(documentFolderId).getParents();
+    if (parents.hasNext()) DriveApp.getFileById(form.getId()).moveTo(parents.next());
+  }
   props.setProperty("REQUEST_FORM_ID", form.getId());
-  return { id: form.getId(), editUrl: form.getEditUrl(), publishedUrl: form.getPublishedUrl(), existing: false };
+  const result = { id: form.getId(), editUrl: form.getEditUrl(), publishedUrl: form.getPublishedUrl(), existing: false };
+  console.log(JSON.stringify(result));
+  return result;
 }
 
 function onRequestFormSubmit(event) {
