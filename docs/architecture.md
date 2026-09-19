@@ -16,12 +16,13 @@
 
 1. A requester submits the district Google Form.
 2. An installable Apps Script trigger writes a normalized request to the restricted operational workbook.
-3. An authorized teacher accepts the request, creating a private Event Order draft.
-4. Draft saves never alter what students see.
-5. **Publish to students** creates an immutable sanitized snapshot with a revision and timestamp.
-6. The public-feed project reads only the latest publication snapshot.
-7. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
-8. The teacher application generates operational Google documents into the configured GCSD Drive folder.
+3. An authorized teacher reviews the request as `Under Review`, `Needs Information`, `Declined`, or `Accepted`; private review notes remain on the request.
+4. Only `Accepted` creates a private Event Order draft. Declined requests never create Event records.
+5. Draft saves never alter what students see.
+6. **Publish to students** creates an immutable sanitized snapshot with a revision and timestamp.
+7. The public-feed project reads only the latest publication snapshot.
+8. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
+9. The teacher application generates operational Google documents into the configured GCSD Drive folder.
 
 ## Scale decision
 
