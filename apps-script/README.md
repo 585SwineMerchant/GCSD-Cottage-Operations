@@ -102,7 +102,9 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, full request queue, event workspaces, separate operational/publication states, structured validation, publication preview and immutable history, unpublish/republish, clone, archive/restore, document history, event audit history, and the Recipe Library. Recipe drafts and approvals are versioned; approved versions can be pinned and scaled on an event. Costing, purchasing, the full production planner, budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
+The protected application now includes the operations dashboard, request queue, event workspaces, publication controls, document and audit history, the versioned Recipe Library, and private event costing and purchasing. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, on-hand quantities, supplier details, status, and immutable cost snapshots remain teacher-only. The full production planner, broader budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
+
+After installing the costing and purchasing release, run `initializeWorkbook()` once. It adds `IngredientPrices`, `EventPurchases`, and `CostSnapshots` without changing existing rows.
 
 ## Upgrade an existing pilot workbook
 
@@ -112,7 +114,7 @@ After replacing the teacher project files, run this once before creating the new
 initializeWorkbook();
 ```
 
-The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the `Recipes`, `RecipeVersions`, `EventRecipes`, and `PublicationItems` tabs, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
+The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the recipe, publication-item, ingredient-price, event-purchase, and cost-snapshot tabs, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
 
 ## Recipe Library workflow
 

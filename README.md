@@ -10,7 +10,7 @@ This repository is intentionally standalone. It does not share Git history, depl
 
 The Teacher Command Center now includes a responsive operations dashboard, request queue, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, event audit history, and an approved Recipe Library with event-level scaling.
 
-Recipe drafts and approvals create immutable versions. Attaching a recipe to an event stores the approved version with that Event Order, so later master-recipe edits cannot silently alter existing event plans or historical publications.
+Recipe drafts and approvals create immutable versions. Attaching a recipe to an event stores the approved version with that Event Order, so later master-recipe edits cannot silently alter existing event plans or historical publications. Private event costing now aggregates scaled ingredients, applies exact-unit package prices, accounts for stock on hand, and creates an auditable purchase plan without exposing supplier or financial data to students.
 
 ## Repository boundaries
 

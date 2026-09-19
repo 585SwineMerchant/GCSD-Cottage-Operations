@@ -58,3 +58,12 @@ For the Recipe Library release:
 6. GitHub Pages deploys the updated student recipe display from this repository.
 
 Verify with one small test recipe: save draft → approve → attach to the existing test event → preview scaled quantities → publish → open the recipe from the student site. Then edit the master recipe and confirm the published event continues to show the pinned version until the attachment is explicitly refreshed and republished.
+
+## Costing and purchasing update
+
+1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. Run `initializeWorkbook()` once to create `IngredientPrices`, `EventPurchases`, and `CostSnapshots`.
+3. Create a new version of the existing GCSD-restricted teacher deployment; keep its URL and permissions unchanged.
+4. Do not change the public-feed deployment. Costing and purchasing data is private and the public contract is unchanged.
+
+Verify by saving one exact-unit ingredient price, building the test event purchase plan, recording an on-hand amount, and generating a new private Event Order. Confirm the student site remains unchanged.

@@ -28,6 +28,8 @@ The sanitizer constructs a new allowlisted object. It does not remove a few bloc
 
 Published recipe data uses the same allowlist approach. Supplier prices, purchasing metadata, author identity, version notes, and recipe audit history are excluded. The event receives a pinned approved snapshot rather than a live reference to the working master recipe.
 
+Ingredient price records, suppliers, SKUs, on-hand counts, package estimates, purchase statuses, notes, and immutable cost snapshots are private operational data. They may appear in the protected Teacher Command Center and generated private Event Order, but the public sanitizer has no fields through which to publish them.
+
 ## Public request intake
 
 The published request Form may be opened by anyone with its link without a Google login. That permission applies only to submitting a response. Form editing, response records, contact information, private review notes, operational Events, audit history, and generated documents remain restricted to authorized GCSD users. The Form asks for contact information directly because no Google identity is required.

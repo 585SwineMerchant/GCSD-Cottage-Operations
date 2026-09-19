@@ -12,7 +12,7 @@
 | Generated documents | New `Generated Event Documents` folder under the project folder | Drive permissions | Event packet records |
 | Student identity and academic work | Google Classroom | Course membership | Classroom record |
 
-The operational workbook also contains three recipe-specific tabs:
+The operational workbook also contains recipe, publication, and private purchasing tabs:
 
 | Tab | Responsibility |
 |---|---|
@@ -20,6 +20,9 @@ The operational workbook also contains three recipe-specific tabs:
 | `RecipeVersions` | Append-only snapshots of every saved and approved version |
 | `EventRecipes` | Approved versions pinned to event menu items, including production quantity and overage |
 | `PublicationItems` | Append-only, one-event-per-row payloads for schema-three public snapshots |
+| `IngredientPrices` | Reusable private supplier/package prices matched by ingredient name and recipe unit |
+| `EventPurchases` | Event-specific required, on-hand, purchase, package, cost, and status records |
+| `CostSnapshots` | Append-only private estimates created whenever a purchase plan is refreshed |
 
 ## Data flow
 
@@ -79,4 +82,4 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, and event scaling are complete in source. Later phases will add costing, purchasing, the full production planner, Kitchen Management documents, budgets and inventory, operational closeout, and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, and event purchasing are complete in source. Later phases will add the full production planner, Kitchen Management documents, broader budgets and inventory, operational closeout, and Recipe Studio export/import.

@@ -426,3 +426,43 @@ test("returning to an open event refreshes its approved recipe choices", async (
   assert.match(teacher, /state\.workspace=await call\("getEventWorkspace",state\.currentId\)/);
   assert.match(teacher, /onclick=\(\)=>navigateView\(b\.dataset\.view\)/);
 });
+
+test("private costing aggregates scaled ingredients and never enters the student snapshot", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const draft = context.saveRecipe({
+    name: "Tomato Soup", standard_yield_quantity: 10, standard_yield_unit: "portions",
+    ingredients: [{ name: "Tomatoes", quantity: 2, unit: "lb" }], procedure: ["Simmer"]
+  });
+  context.approveRecipe(draft.recipe_id, "Approved");
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-cost", menu_json: JSON.stringify([{ name: "Tomato Soup", required: 40 }]), tasks_json: JSON.stringify([{ name: "Tomato Soup" }]) }));
+  context.attachRecipeToEvent("evt-cost", draft.recipe_id, "Tomato Soup", 40, 10);
+  context.saveIngredientPrice({ ingredient_name: "Tomatoes", recipe_unit: "lb", package_description: "5 lb pack", package_quantity: 5, package_price: 10, supplier: "Private Supplier", sku: "SECRET-SKU" });
+  const costing = context.generateEventPurchasePlan("evt-cost");
+  assert.equal(costing.items.length, 1);
+  assert.equal(costing.items[0].required_quantity, 8.8);
+  assert.equal(costing.items[0].packages_needed, 2);
+  assert.equal(costing.estimatedTotal, 20);
+  assert.equal(costing.unpricedCount, 0);
+  const adjusted = context.updateEventPurchaseItem(costing.items[0].purchase_item_id, { on_hand_quantity: 4, status: "Ordered", notes: "Use existing stock first" });
+  assert.equal(adjusted.items[0].to_purchase_quantity, 4.8);
+  assert.equal(adjusted.items[0].packages_needed, 1);
+  assert.equal(adjusted.estimatedTotal, 10);
+  assert.equal(adjusted.items[0].status, "Ordered");
+  assert.equal(context.records_("CostSnapshots").length, 1);
+  assert.throws(() => context.updateRecord_("CostSnapshots", "cost_snapshot_id", context.records_("CostSnapshots")[0].cost_snapshot_id, { estimated_total: 0 }), /append-only/);
+  const publicEvent = context.sanitizePublicEvent_(context.findRecord_("Events", "event_id", "evt-cost"), context.eventRecipeRecords_("evt-cost"));
+  const json = JSON.stringify(publicEvent);
+  assert.equal(json.includes("Private Supplier"), false);
+  assert.equal(json.includes("SECRET-SKU"), false);
+  assert.equal(json.includes("estimated_cost"), false);
+});
+
+test("costing and purchasing controls are present in the private event workspace", async () => {
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  ["costSummary", "generatePurchases", "priceCatalog", "purchasePlan", "savePrice"].forEach(id => assert.match(teacher, new RegExp(`id="${id}"`)));
+  assert.match(teacher, /saveIngredientPrice/);
+  assert.match(teacher, /generateEventPurchasePlan/);
+  assert.match(teacher, /updateEventPurchaseItem/);
+});
