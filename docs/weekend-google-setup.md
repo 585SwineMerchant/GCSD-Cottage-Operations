@@ -47,6 +47,8 @@ Review and approve only the Google permissions requested by this newly named pro
 
 Run `createRequestForm()` once from the teacher Apps Script editor. The Form is moved into the top-level `GCSD Cottage Operations` folder, and its editing and published URLs are printed in the execution log. Record both URLs. The function remembers the Form ID, so rerunning it returns the same Form instead of silently creating duplicates unless that Form was deleted or became inaccessible.
 
+For the approved external-client intake, open the Form editor and change **Published → Manage → General access** to **Anyone with the link**, with the role **Responder**. Verify the published URL opens in a completely signed-out private window. This does not share the Form editor or response workbook. If the option is unavailable, stop and record the GCSD policy restriction.
+
 Submit one clearly labeled test request. Confirm one row appears in `Requests` and that the row does not contain student information.
 
 ## 4. Deploy the Teacher Command Center
