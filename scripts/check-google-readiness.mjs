@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 const root = new URL("../", import.meta.url);
-const EXEC_URL = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
+const EXEC_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[A-Za-z0-9.-]+\/|macros\/)s\/[A-Za-z0-9_-]+\/exec$/;
 
 export function inspectConfiguration(config) {
   const issues = [];
@@ -14,7 +14,7 @@ export function inspectConfiguration(config) {
   ]) {
     const value = String(config?.[key] || "").trim();
     if (!value) pending.push(`${label} /exec URL`);
-    else if (!EXEC_URL.test(value)) issues.push(`${label} must be a script.google.com /macros/s/.../exec URL.`);
+    else if (!EXEC_URL.test(value)) issues.push(`${label} must be a production script.google.com /exec URL.`);
   }
   return { connected: !pending.length && !issues.length, pending, issues };
 }
