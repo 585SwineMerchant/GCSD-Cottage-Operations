@@ -475,6 +475,25 @@ test("recipe approval blocks missing ingredient quantities and units", async () 
     name: "Invalid Salsa", standard_yield_quantity: 8, standard_yield_unit: "portions",
     ingredients: [{ name: "Tomatoes", quantity: 0, unit: "" }], procedure: ["Dice"]
   });
-  assert.throws(() => context.approveRecipe(draft.recipe_id, "Should fail"), /needs a quantity greater than zero/);
-  assert.throws(() => context.approveRecipe(draft.recipe_id, "Should fail"), /needs a unit/);
+  assert.throws(() => context.approveRecipe(draft.recipe_id, "Should fail"), /needs a positive quantity or an instruction/);
+});
+
+test("qualitative ingredients remain visible but are excluded from automatic costing", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const draft = context.saveRecipe({
+    name: "Seasoned Tomatoes", standard_yield_quantity: 8, standard_yield_unit: "portions",
+    ingredients: [{ name: "Tomatoes", quantity: 2, unit: "lb" }, { name: "Salt", quantityText: "to taste", unit: "" }], procedure: ["Season"]
+  });
+  const approved = context.approveRecipe(draft.recipe_id, "Approved");
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-qualitative", menu_json: JSON.stringify([{ name: "Seasoned Tomatoes", required: 8 }]), tasks_json: JSON.stringify([{ name: "Seasoned Tomatoes" }]) }));
+  const attachment = context.attachRecipeToEvent("evt-qualitative", approved.recipe_id, "Seasoned Tomatoes", 8, 0);
+  assert.ok(attachment.scaled_recipe.ingredients.includes("Salt to taste"));
+  const costing = context.generateEventPurchasePlan("evt-qualitative");
+  const salt = costing.items.find(item => item.ingredient_name === "Salt");
+  assert.equal(salt.requirement_text, "to taste");
+  assert.equal(salt.required_quantity, 0);
+  assert.equal(salt.status, "As needed");
+  assert.equal(costing.unpricedCount, 1);
 });

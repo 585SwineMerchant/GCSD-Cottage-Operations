@@ -28,7 +28,7 @@ const HEADERS = Object.freeze({
   EventRecipes: ["event_recipe_id", "event_id", "menu_item_name", "recipe_id", "recipe_version", "required_quantity", "overage_percent", "snapshot_json", "active", "attached_at", "attached_by", "updated_at", "updated_by"],
   PublicationItems: ["publication_item_id", "publication_id", "publication_sequence", "event_id", "event_json"],
   IngredientPrices: ["price_id", "ingredient_name", "recipe_unit", "package_description", "package_quantity", "package_price", "supplier", "sku", "notes", "active", "updated_at", "updated_by"],
-  EventPurchases: ["purchase_item_id", "event_id", "ingredient_name", "recipe_unit", "required_quantity", "on_hand_quantity", "to_purchase_quantity", "package_description", "package_quantity", "package_price", "packages_needed", "estimated_cost", "supplier", "sku", "status", "notes", "source_json", "active", "updated_at", "updated_by"],
+  EventPurchases: ["purchase_item_id", "event_id", "ingredient_name", "recipe_unit", "required_quantity", "on_hand_quantity", "to_purchase_quantity", "package_description", "package_quantity", "package_price", "packages_needed", "estimated_cost", "supplier", "sku", "status", "notes", "source_json", "active", "updated_at", "updated_by", "requirement_text"],
   CostSnapshots: ["cost_snapshot_id", "event_id", "created_at", "created_by", "estimated_total", "unpriced_count", "snapshot_json"]
 });
 
@@ -443,7 +443,8 @@ function generateEventPurchasePlan(eventId) {
       const prior = existing.find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === requirement.key && String(item.active || "TRUE").toUpperCase() !== "FALSE");
       const price = prices.find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === requirement.key);
       const onHand = positiveOrZero_(prior && prior.on_hand_quantity);
-      const toPurchase = roundQuantity_(Math.max(requirement.requiredQuantity - onHand, 0));
+      const qualitativeOnly = !requirement.requiredQuantity && Boolean(requirement.requirementText);
+      const toPurchase = qualitativeOnly ? 0 : roundQuantity_(Math.max(requirement.requiredQuantity - onHand, 0));
       const packageQuantity = positiveNumber_(price && price.package_quantity, 0);
       const packagesNeeded = packageQuantity ? Math.ceil(toPurchase / packageQuantity) : 0;
       const estimatedCost = price ? roundMoney_(packagesNeeded * positiveNumber_(price.package_price, 0)) : 0;
@@ -453,9 +454,9 @@ function generateEventPurchasePlan(eventId) {
         required_quantity: requirement.requiredQuantity, on_hand_quantity: onHand, to_purchase_quantity: toPurchase,
         package_description: price ? price.package_description : "", package_quantity: packageQuantity, package_price: price ? positiveNumber_(price.package_price, 0) : 0,
         packages_needed: packagesNeeded, estimated_cost: estimatedCost, supplier: price ? price.supplier : "",
-        sku: price ? price.sku : "", status: prior ? clean_(prior.status, 50) || "Needed" : "Needed",
+        sku: price ? price.sku : "", status: prior ? clean_(prior.status, 50) || (qualitativeOnly ? "As needed" : "Needed") : (qualitativeOnly ? "As needed" : "Needed"),
         notes: prior ? clean_(prior.notes, 1000) : "", source_json: JSON.stringify(requirement.sources),
-        active: "TRUE", updated_at: now, updated_by: teacher.email
+        active: "TRUE", updated_at: now, updated_by: teacher.email, requirement_text: requirement.requirementText
       };
       if (prior) updateRecord_(SHEETS.EVENT_PURCHASES, "purchase_item_id", prior.purchase_item_id, record);
       else appendRecord_(SHEETS.EVENT_PURCHASES, record);
@@ -482,12 +483,13 @@ function updateEventPurchaseItem(purchaseItemId, input) {
   return withLock_(() => {
     const item = findRecord_(SHEETS.EVENT_PURCHASES, "purchase_item_id", purchaseItemId);
     if (!item || String(item.active || "TRUE").toUpperCase() === "FALSE") throw new Error("Purchase item not found.");
-    const statuses = ["Needed", "Ordered", "Purchased", "Not needed"];
+    const statuses = ["Needed", "Ordered", "Purchased", "Not needed", "As needed"];
     const status = clean_(input && input.status, 50) || "Needed";
     if (!statuses.includes(status)) throw new Error("Invalid purchasing status.");
     const onHand = positiveOrZero_(input && input.on_hand_quantity);
     const required = positiveOrZero_(item.required_quantity);
-    const toPurchase = roundQuantity_(Math.max(required - onHand, 0));
+    const qualitativeOnly = !required && Boolean(clean_(item.requirement_text, 200));
+    const toPurchase = qualitativeOnly ? 0 : roundQuantity_(Math.max(required - onHand, 0));
     const packageQuantity = positiveNumber_(item.package_quantity, 0);
     const packagesNeeded = packageQuantity ? Math.ceil(toPurchase / packageQuantity) : 0;
     const packagePrice = positiveNumber_(item.package_price, 0);
@@ -799,8 +801,9 @@ function generateEventDocument(eventId) {
     body.appendParagraph("Private costing and purchasing").setHeading(DocumentApp.ParagraphHeading.HEADING1);
     body.appendParagraph(`Estimated purchase total: $${costing.estimatedTotal.toFixed(2)} · Unpriced ingredients: ${costing.unpricedCount}`);
     costing.items.forEach(item => {
-      body.appendParagraph(`${item.ingredient_name} · ${item.required_quantity} ${item.recipe_unit}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
-      body.appendParagraph(`On hand: ${item.on_hand_quantity} · Purchase: ${item.to_purchase_quantity} · Packages: ${item.packages_needed || "Unpriced"} · Estimated cost: $${Number(item.estimated_cost || 0).toFixed(2)} · Status: ${item.status || "Needed"}`);
+      const requirement = [item.required_quantity ? `${item.required_quantity} ${item.recipe_unit}`.trim() : "", item.requirement_text].filter(Boolean).join(" · ") || "As needed";
+      body.appendParagraph(`${item.ingredient_name} · ${requirement}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+      body.appendParagraph(item.requirement_text && !item.required_quantity ? `Qualitative requirement · Status: ${item.status || "As needed"}` : `On hand: ${item.on_hand_quantity} · Purchase: ${item.to_purchase_quantity} · Packages: ${item.packages_needed || "Unpriced"} · Estimated cost: $${Number(item.estimated_cost || 0).toFixed(2)} · Status: ${item.status || "Needed"}`);
       if (item.supplier || item.package_description || item.sku) body.appendParagraph(`Supplier: ${item.supplier || "Pending"} · Package: ${item.package_description || "Pending"} · SKU: ${item.sku || "Pending"}`);
       if (item.notes) body.appendParagraph(`Purchasing notes: ${item.notes}`);
     });
@@ -878,6 +881,7 @@ function normalizeRecipeInput_(input) {
     allergens: clean_(input.allergens, 2000), competencies: clean_(input.competencies, 2000),
     ingredients_json: JSON.stringify(ingredients.slice(0, 200).map(item => ({
       name: clean_(item && item.name, 300), quantity: positiveNumber_(item && item.quantity, 0),
+      quantityText: clean_(item && (item.quantityText || item.quantity_text), 100),
       unit: clean_(item && item.unit, 100), preparation: clean_(item && item.preparation, 300)
     })).filter(item => item.name)),
     equipment_json: JSON.stringify(list_(input.equipment, 100, 200)),
@@ -906,6 +910,7 @@ function normalizeRecipeIngredients_(ingredients) {
   if (!Array.isArray(ingredients)) return [];
   return ingredients.slice(0, 200).map(item => ({
     name: clean_(item && item.name, 300), quantity: positiveNumber_(item && item.quantity, 0),
+    quantityText: clean_(item && (item.quantityText || item.quantity_text), 100),
     unit: clean_(item && item.unit, 100), preparation: clean_(item && item.preparation, 300)
   })).filter(item => item.name);
 }
@@ -918,8 +923,10 @@ function recipeApprovalIssues_(recipe) {
   if (!String(recipe.standard_yield_unit || "").trim()) issues.push("yield unit is missing");
   if (!ingredients.length) issues.push("ingredients are empty");
   ingredients.forEach((ingredient, index) => {
-    if (!positiveNumber_(ingredient.quantity, 0)) issues.push(`ingredient ${index + 1} (${ingredient.name}) needs a quantity greater than zero`);
-    if (!String(ingredient.unit || "").trim()) issues.push(`ingredient ${index + 1} (${ingredient.name}) needs a unit`);
+    const numeric = positiveNumber_(ingredient.quantity, 0);
+    const qualitative = String(ingredient.quantityText || "").trim();
+    if (!numeric && !qualitative) issues.push(`ingredient ${index + 1} (${ingredient.name}) needs a positive quantity or an instruction such as to taste`);
+    if (numeric && !String(ingredient.unit || "").trim()) issues.push(`ingredient ${index + 1} (${ingredient.name}) needs a unit`);
   });
   if (!list_(parseJson_(recipe.procedure_json, []), 200, 1000).length) issues.push("procedure is empty");
   return issues;
@@ -960,6 +967,9 @@ function scaleRecipeSnapshot_(attachment) {
   const productionTarget = required * (1 + overage / 100);
   const factor = standardYield ? productionTarget / standardYield : 0;
   const ingredients = normalizeRecipeIngredients_(recipe.ingredients || []).map(item => {
+    if (!positiveNumber_(item.quantity, 0) && item.quantityText) {
+      return [item.name, item.quantityText, item.preparation ? `(${item.preparation})` : ""].filter(Boolean).join(" ");
+    }
     const scaled = roundQuantity_(item.quantity * factor);
     return [scaled || "", item.unit, item.name, item.preparation ? `(${item.preparation})` : ""].filter(value => value !== "").join(" ");
   });
@@ -988,17 +998,22 @@ function ingredientRequirements_(eventId) {
     const target = positiveNumber_(attachment.required_quantity, 0) * (1 + boundedNumber_(attachment.overage_percent, 0, 100, 0) / 100);
     const factor = standardYield ? target / standardYield : 0;
     const ingredients = normalizeRecipeIngredients_(recipe.ingredients || []);
-    const invalid = ingredients.filter(ingredient => !positiveNumber_(ingredient.quantity, 0) || !String(ingredient.unit || "").trim());
-    if (invalid.length) throw new Error(`Pinned recipe ${clean_(recipe.name, 300)} version ${Number(recipe.version || attachment.recipe_version || 0)} has ingredients missing a positive quantity or unit: ${invalid.map(item => item.name).join(", ")}. Correct and approve the recipe, then refresh the event attachment.`);
+    const invalid = ingredients.filter(ingredient => (!positiveNumber_(ingredient.quantity, 0) && !String(ingredient.quantityText || "").trim()) || (positiveNumber_(ingredient.quantity, 0) && !String(ingredient.unit || "").trim()));
+    if (invalid.length) throw new Error(`Pinned recipe ${clean_(recipe.name, 300)} version ${Number(recipe.version || attachment.recipe_version || 0)} has ingredients missing a usable quantity or unit: ${invalid.map(item => item.name).join(", ")}. Correct and approve the recipe, then refresh the event attachment.`);
     ingredients.forEach(ingredient => {
       const key = ingredientKey_(ingredient.name, ingredient.unit);
-      if (!aggregate[key]) aggregate[key] = { key, ingredientName: ingredient.name, recipeUnit: ingredient.unit, requiredQuantity: 0, sources: [] };
-      const quantity = roundQuantity_(ingredient.quantity * factor);
+      if (!aggregate[key]) aggregate[key] = { key, ingredientName: ingredient.name, recipeUnit: ingredient.unit, requiredQuantity: 0, qualitative: [], sources: [] };
+      const quantity = positiveNumber_(ingredient.quantity, 0) ? roundQuantity_(ingredient.quantity * factor) : 0;
       aggregate[key].requiredQuantity = roundQuantity_(aggregate[key].requiredQuantity + quantity);
-      aggregate[key].sources.push({ menuItemName: attachment.menu_item_name, recipeId: attachment.recipe_id, recipeVersion: Number(attachment.recipe_version || 0), quantity });
+      if (ingredient.quantityText && !aggregate[key].qualitative.includes(ingredient.quantityText)) aggregate[key].qualitative.push(ingredient.quantityText);
+      aggregate[key].sources.push({ menuItemName: attachment.menu_item_name, recipeId: attachment.recipe_id, recipeVersion: Number(attachment.recipe_version || 0), quantity, quantityText: ingredient.quantityText || "" });
     });
   });
-  return Object.keys(aggregate).map(key => aggregate[key]).sort((a, b) => a.ingredientName.localeCompare(b.ingredientName) || a.recipeUnit.localeCompare(b.recipeUnit));
+  return Object.keys(aggregate).map(key => {
+    const item = aggregate[key];
+    item.requirementText = item.qualitative.length ? `${item.requiredQuantity ? "plus " : ""}${item.qualitative.join(" / ")}` : "";
+    return item;
+  }).sort((a, b) => a.ingredientName.localeCompare(b.ingredientName) || a.recipeUnit.localeCompare(b.recipeUnit));
 }
 
 function eventCosting_(eventId) {
@@ -1008,13 +1023,13 @@ function eventCosting_(eventId) {
       required_quantity: positiveOrZero_(item.required_quantity), on_hand_quantity: positiveOrZero_(item.on_hand_quantity),
       to_purchase_quantity: positiveOrZero_(item.to_purchase_quantity), package_quantity: positiveOrZero_(item.package_quantity),
       package_price: positiveOrZero_(item.package_price), packages_needed: positiveOrZero_(item.packages_needed),
-      estimated_cost: positiveOrZero_(item.estimated_cost), sources: parseJson_(item.source_json, [])
+      estimated_cost: positiveOrZero_(item.estimated_cost), requirement_text: clean_(item.requirement_text, 200), sources: parseJson_(item.source_json, [])
     }))
     .sort((a, b) => String(a.ingredient_name).localeCompare(String(b.ingredient_name)) || String(a.recipe_unit).localeCompare(String(b.recipe_unit)));
   return {
     items,
     estimatedTotal: roundMoney_(items.reduce((total, item) => total + positiveOrZero_(item.estimated_cost), 0)),
-    unpricedCount: items.filter(item => !positiveNumber_(item.package_quantity, 0) || !positiveNumber_(item.package_price, 0)).length,
+    unpricedCount: items.filter(item => positiveNumber_(item.required_quantity, 0) && (!positiveNumber_(item.package_quantity, 0) || !positiveNumber_(item.package_price, 0))).length,
     latestSnapshot: records_(SHEETS.COST_SNAPSHOTS).filter(item => String(item.event_id) === String(eventId)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
   };
 }
