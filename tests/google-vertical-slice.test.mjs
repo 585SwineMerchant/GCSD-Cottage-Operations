@@ -466,3 +466,15 @@ test("costing and purchasing controls are present in the private event workspace
   assert.match(teacher, /generateEventPurchasePlan/);
   assert.match(teacher, /updateEventPurchaseItem/);
 });
+
+test("recipe approval blocks missing ingredient quantities and units", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const draft = context.saveRecipe({
+    name: "Invalid Salsa", standard_yield_quantity: 8, standard_yield_unit: "portions",
+    ingredients: [{ name: "Tomatoes", quantity: 0, unit: "" }], procedure: ["Dice"]
+  });
+  assert.throws(() => context.approveRecipe(draft.recipe_id, "Should fail"), /needs a quantity greater than zero/);
+  assert.throws(() => context.approveRecipe(draft.recipe_id, "Should fail"), /needs a unit/);
+});

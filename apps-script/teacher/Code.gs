@@ -912,10 +912,15 @@ function normalizeRecipeIngredients_(ingredients) {
 
 function recipeApprovalIssues_(recipe) {
   const issues = [];
+  const ingredients = normalizeRecipeIngredients_(parseJson_(recipe.ingredients_json, []));
   if (!String(recipe.name || "").trim()) issues.push("name is missing");
   if (!positiveNumber_(recipe.standard_yield_quantity, 0)) issues.push("standard yield must be greater than zero");
   if (!String(recipe.standard_yield_unit || "").trim()) issues.push("yield unit is missing");
-  if (!normalizeRecipeIngredients_(parseJson_(recipe.ingredients_json, [])).length) issues.push("ingredients are empty");
+  if (!ingredients.length) issues.push("ingredients are empty");
+  ingredients.forEach((ingredient, index) => {
+    if (!positiveNumber_(ingredient.quantity, 0)) issues.push(`ingredient ${index + 1} (${ingredient.name}) needs a quantity greater than zero`);
+    if (!String(ingredient.unit || "").trim()) issues.push(`ingredient ${index + 1} (${ingredient.name}) needs a unit`);
+  });
   if (!list_(parseJson_(recipe.procedure_json, []), 200, 1000).length) issues.push("procedure is empty");
   return issues;
 }
@@ -982,7 +987,10 @@ function ingredientRequirements_(eventId) {
     const standardYield = positiveNumber_(recipe.standardYieldQuantity, 0);
     const target = positiveNumber_(attachment.required_quantity, 0) * (1 + boundedNumber_(attachment.overage_percent, 0, 100, 0) / 100);
     const factor = standardYield ? target / standardYield : 0;
-    normalizeRecipeIngredients_(recipe.ingredients || []).forEach(ingredient => {
+    const ingredients = normalizeRecipeIngredients_(recipe.ingredients || []);
+    const invalid = ingredients.filter(ingredient => !positiveNumber_(ingredient.quantity, 0) || !String(ingredient.unit || "").trim());
+    if (invalid.length) throw new Error(`Pinned recipe ${clean_(recipe.name, 300)} version ${Number(recipe.version || attachment.recipe_version || 0)} has ingredients missing a positive quantity or unit: ${invalid.map(item => item.name).join(", ")}. Correct and approve the recipe, then refresh the event attachment.`);
+    ingredients.forEach(ingredient => {
       const key = ingredientKey_(ingredient.name, ingredient.unit);
       if (!aggregate[key]) aggregate[key] = { key, ingredientName: ingredient.name, recipeUnit: ingredient.unit, requiredQuantity: 0, sources: [] };
       const quantity = roundQuantity_(ingredient.quantity * factor);
