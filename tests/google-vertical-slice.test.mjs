@@ -96,6 +96,12 @@ test("teacher and public Apps Script deployments have separate access policies",
   assert.equal(feed.webapp.access, "ANYONE_ANONYMOUS");
 });
 
+test("request Form is moved into the version-two project folder and logs its URLs", async () => {
+  const source = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
+  assert.match(source, /DriveApp\.getFileById\(form\.getId\(\)\)\.moveTo\(parents\.next\(\)\)/);
+  assert.match(source, /console\.log\(JSON\.stringify\(result\)\)/);
+});
+
 test("GitHub student view is manual-refresh and read-only", async () => {
   const source = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
   const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
