@@ -6,6 +6,8 @@ const SHEETS = Object.freeze({
   AUDIT: "Audit"
 });
 
+const REQUEST_REVIEW_STATUSES = Object.freeze(["New", "Under Review", "Needs Information", "Declined"]);
+
 const HEADERS = Object.freeze({
   Requests: ["request_id", "submitted_at", "requester", "contact_name", "contact_email", "contact_phone", "event_name", "event_type", "school", "service_date", "service_time", "guest_count", "service_format", "requested_menu", "requirements", "allergens", "internal_notes", "status", "event_id", "updated_at"],
   Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by"],
@@ -154,12 +156,36 @@ function getDashboard() {
   };
 }
 
-function acceptRequest(requestId) {
+function reviewRequest(requestId, status, note) {
+  const teacher = assertTeacher_();
+  const nextStatus = clean_(status, 100);
+  const reviewNote = clean_(note, 4000);
+  if (!REQUEST_REVIEW_STATUSES.includes(nextStatus)) throw new Error("Invalid request review status.");
+  if (["Needs Information", "Declined"].includes(nextStatus) && !reviewNote) {
+    throw new Error(`${nextStatus} requires a private review note.`);
+  }
+  return withLock_(() => {
+    const request = findRecord_(SHEETS.REQUESTS, "request_id", requestId);
+    if (!request) throw new Error("Request not found.");
+    if (request.status === "Accepted") throw new Error("Accepted requests are managed from their Event draft.");
+    const now = new Date().toISOString();
+    updateRecord_(SHEETS.REQUESTS, "request_id", requestId, {
+      status: nextStatus,
+      internal_notes: reviewNote,
+      updated_at: now
+    });
+    audit_(teacher.email, "review", "request", requestId, { status: nextStatus, note: reviewNote });
+    return findRecord_(SHEETS.REQUESTS, "request_id", requestId);
+  });
+}
+
+function acceptRequest(requestId, reviewNote) {
   const teacher = assertTeacher_();
   return withLock_(() => {
     const request = findRecord_(SHEETS.REQUESTS, "request_id", requestId);
     if (!request) throw new Error("Request not found.");
     if (request.status === "Accepted" && request.event_id) return findRecord_(SHEETS.EVENTS, "event_id", request.event_id);
+    if (request.status === "Declined") throw new Error("Reopen the request before accepting it.");
     const now = new Date().toISOString();
     const event = {
       event_id: id_("evt"), request_id: request.request_id, event_name: request.event_name,
@@ -174,7 +200,10 @@ function acceptRequest(requestId) {
       created_at: now, updated_at: now, updated_by: teacher.email
     };
     appendRecord_(SHEETS.EVENTS, event);
-    updateRecord_(SHEETS.REQUESTS, "request_id", requestId, { status: "Accepted", event_id: event.event_id, updated_at: now });
+    updateRecord_(SHEETS.REQUESTS, "request_id", requestId, {
+      status: "Accepted", event_id: event.event_id,
+      internal_notes: clean_(reviewNote || request.internal_notes, 4000), updated_at: now
+    });
     audit_(teacher.email, "accept", "request", requestId, { eventId: event.event_id });
     return event;
   });
