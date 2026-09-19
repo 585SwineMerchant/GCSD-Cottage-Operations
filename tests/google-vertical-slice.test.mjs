@@ -190,8 +190,22 @@ test("request acceptance, draft save, publication, and document generation compl
   const event = context.acceptRequest("req-1");
   context.saveEvent({ ...event, client_display_name: "GCSD Professional Learning", learning_focus: "Communication and culinary math", safety_controls: "Prevent cross-contact; sanitize station", menu: [{ name: "Muffins", required: 80 }], tasks: [{ teamLabel: "Team A", station: "Kitchen 1", name: "Muffins", quantity: "80", instructions: "Package and label", equipment: ["sheet pans"], qualityControls: ["count verified"], handoff: "Deliver to service team" }] });
   const publication = context.publishEvent(event.event_id);
+  const publishedEvent = context.findRecord_("Events", "event_id", event.event_id);
+  const unchanged = context.saveEvent({
+    ...publishedEvent,
+    menu: context.parseJson_(publishedEvent.menu_json, []),
+    tasks: context.parseJson_(publishedEvent.tasks_json, [])
+  });
+  const revised = context.saveEvent({
+    ...unchanged,
+    event_name: "Welcome Breakfast - revised",
+    menu: context.parseJson_(unchanged.menu_json, []),
+    tasks: context.parseJson_(unchanged.tasks_json, [])
+  });
   const document = context.generateEventDocument(event.event_id);
   assert.equal(publication.revision, 1);
+  assert.equal(unchanged.stage, "Published");
+  assert.equal(revised.stage, "Revised draft");
   assert.equal(publication.snapshot.events[0].tasks[0].teamLabel, "Team A");
   assert.deepEqual(Array.from(publication.snapshot.events[0].tasks[0].equipment), ["sheet pans"]);
   assert.equal(publication.snapshot.events[0].learningFocus, "Communication and culinary math");
