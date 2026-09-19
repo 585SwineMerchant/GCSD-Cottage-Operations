@@ -47,6 +47,8 @@ This creates and validates these tabs:
 
 Then run `createRequestForm()` once. Its return value contains the editing and published URLs for the generated client-request Form. An installable form-submit trigger is created automatically.
 
+For external client intake, open the Form's editing view and set **Published → Manage → General access** to **Anyone with the link** with the role **Responder**. This makes only the response form public; the Form editor, response workbook, contact information, and request-review notes remain restricted. If GCSD policy does not offer this option, keep the Form district-restricted and escalate the external-intake decision to IT.
+
 Deploy the teacher project as a web app:
 
 - Execute as: **User deploying the web app**
