@@ -418,3 +418,11 @@ test("recipe attachment preserves selections across an automatic event save", as
   assert.ok(handler.indexOf('recipeId=q("#attachRecipe").value') < handler.indexOf("if(state.dirty"));
   assert.match(teacher, /eventForm"\)\.addEventListener\("input",event=>\{if\(event\.target\.name\)markDirty\(true\)\}\)/);
 });
+
+test("returning to an open event refreshes its approved recipe choices", async () => {
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  assert.match(teacher, /async function navigateView\(view\)/);
+  assert.match(teacher, /view==="events"&&state\.currentId/);
+  assert.match(teacher, /state\.workspace=await call\("getEventWorkspace",state\.currentId\)/);
+  assert.match(teacher, /onclick=\(\)=>navigateView\(b\.dataset\.view\)/);
+});
