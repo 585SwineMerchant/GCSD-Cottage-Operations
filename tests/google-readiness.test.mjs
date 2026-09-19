@@ -12,7 +12,7 @@ test("blank Google URLs are reported as intentionally pending", () => {
 test("only production Apps Script exec URLs pass readiness validation", () => {
   const valid = inspectConfiguration({
     publicFeedUrl: "https://script.google.com/macros/s/public_feed_123/exec",
-    teacherCommandCenterUrl: "https://script.google.com/macros/s/teacher_app_456/exec"
+    teacherCommandCenterUrl: "https://script.google.com/a/macros/greececsd.org/s/teacher_app_456/exec"
   });
   assert.equal(valid.connected, true);
   assert.deepEqual(valid.issues, []);
