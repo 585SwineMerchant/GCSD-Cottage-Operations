@@ -147,6 +147,35 @@ test("configuration rejects URLs, personal accounts, and a missing project folde
   }), /documentFolderId is required/);
 });
 
+test("request review statuses do not create Events until explicit acceptance", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.appendRecord_("Requests", {
+    request_id: "req-review", submitted_at: "2026-09-19T12:00:00.000Z", requester: "Test Client",
+    contact_name: "Private Contact", contact_email: "private@example.test", contact_phone: "",
+    event_name: "Review Test", event_type: "Internal service", school: "Arcadia", service_date: "2026-10-01",
+    service_time: "10:00 AM", guest_count: 12, service_format: "Pickup", requested_menu: "Focaccia",
+    requirements: "Test", allergens: "None declared", internal_notes: "", status: "New", event_id: "", updated_at: "2026-09-19T12:00:00.000Z"
+  });
+
+  assert.throws(() => context.reviewRequest("req-review", "Needs Information", ""), /requires a private review note/);
+  context.reviewRequest("req-review", "Needs Information", "Confirm service location.");
+  assert.equal(context.records_("Requests")[0].status, "Needs Information");
+  assert.equal(context.records_("Events").length, 0);
+
+  context.reviewRequest("req-review", "Declined", "Schedule cannot be accommodated.");
+  assert.equal(context.records_("Events").length, 0);
+  assert.throws(() => context.acceptRequest("req-review"), /Reopen the request/);
+
+  context.reviewRequest("req-review", "Under Review", "Client supplied a new date.");
+  const event = context.acceptRequest("req-review", "Approved after date change.");
+  assert.equal(context.records_("Requests")[0].status, "Accepted");
+  assert.equal(context.records_("Requests")[0].internal_notes, "Approved after date change.");
+  assert.equal(context.records_("Events").length, 1);
+  assert.equal(event.event_name, "Review Test");
+});
+
 test("request acceptance, draft save, publication, and document generation complete the vertical slice", async () => {
   const fake = fakeAppsScript();
   const context = await teacherContext(fake.globals);
