@@ -16,6 +16,8 @@ The source curriculum documents support an event-centered production system. The
 
 The initial skill vocabulary can be drawn from the supplied scope-and-sequence, employability profile, and pathway skills map: food safety, equipment, knife skills, culinary math, nutrition, menu planning, marketing, baking, produce, grains, eggs and dairy, proteins, stocks and sauces, sustainability, global cuisine, communication, resource management, and quality of work.
 
+The Recipe Library stores this vocabulary as event-level recipe competencies. These labels describe the instructional focus of production work; they do not store individual student ratings, grades, attendance, or certification results. Standard yields and event scaling directly support culinary math, portion control, resource management, and quality-control instruction.
+
 ## Deliberate privacy boundary
 
 The teacher may publish an **event-level learning focus**, such as `communication, culinary math, and quality control`. The system must not attach competencies, ratings, attendance, performance comments, grades, certifications, or individual roles to a named student.

@@ -3,7 +3,11 @@ const SHEETS = Object.freeze({
   EVENTS: "Events",
   PUBLICATIONS: "Publications",
   DOCUMENTS: "Documents",
-  AUDIT: "Audit"
+  AUDIT: "Audit",
+  RECIPES: "Recipes",
+  RECIPE_VERSIONS: "RecipeVersions",
+  EVENT_RECIPES: "EventRecipes",
+  PUBLICATION_ITEMS: "PublicationItems"
 });
 
 const REQUEST_REVIEW_STATUSES = Object.freeze(["New", "Under Review", "Needs Information", "Declined"]);
@@ -15,7 +19,11 @@ const HEADERS = Object.freeze({
   Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by", "lifecycle_status", "publication_status", "unpublished_at", "unpublished_by", "archived_at", "archived_by", "source_event_id"],
   Publications: ["publication_id", "event_id", "revision", "published_at", "published_by", "snapshot_json", "action", "reason"],
   Documents: ["document_id", "event_id", "document_type", "file_id", "file_url", "created_at", "created_by"],
-  Audit: ["audit_id", "occurred_at", "actor", "action", "record_type", "record_id", "detail_json"]
+  Audit: ["audit_id", "occurred_at", "actor", "action", "record_type", "record_id", "detail_json"],
+  Recipes: ["recipe_id", "name", "category", "status", "current_version", "standard_yield_quantity", "standard_yield_unit", "portion_size", "allergens", "competencies", "ingredients_json", "equipment_json", "procedure_json", "safety_controls", "quality_controls_json", "created_at", "created_by", "updated_at", "updated_by"],
+  RecipeVersions: ["recipe_version_id", "recipe_id", "version", "status", "created_at", "created_by", "change_note", "snapshot_json"],
+  EventRecipes: ["event_recipe_id", "event_id", "menu_item_name", "recipe_id", "recipe_version", "required_quantity", "overage_percent", "snapshot_json", "active", "attached_at", "attached_by", "updated_at", "updated_by"],
+  PublicationItems: ["publication_item_id", "publication_id", "publication_sequence", "event_id", "event_json"]
 });
 
 function doGet() {
@@ -172,6 +180,7 @@ function getDashboard() {
     events,
     publications,
     documents: records_(SHEETS.DOCUMENTS).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+    recipes: recipeSummaries_(),
     summary: dashboardSummary_(events)
   };
 }
@@ -188,6 +197,8 @@ function getEventWorkspace(eventId) {
     event: enrichEvent_(event),
     sourceRequest: event.request_id ? findRecord_(SHEETS.REQUESTS, "request_id", event.request_id) : null,
     documents: records_(SHEETS.DOCUMENTS).filter(item => String(item.event_id) === String(eventId)),
+    eventRecipes: eventRecipeRecords_(eventId).map(enrichEventRecipe_),
+    approvedRecipes: recipeSummaries_().filter(item => item.status === "Approved"),
     publications,
     audit: records_(SHEETS.AUDIT)
       .filter(item => String(item.record_id) === String(eventId) || String(parseJson_(item.detail_json, {}).eventId || "") === String(eventId))
@@ -215,6 +226,159 @@ function reviewRequest(requestId, status, note) {
     });
     audit_(teacher.email, "review", "request", requestId, { status: nextStatus, note: reviewNote });
     return findRecord_(SHEETS.REQUESTS, "request_id", requestId);
+  });
+}
+
+function getRecipeLibrary() {
+  assertTeacher_();
+  return recipeSummaries_();
+}
+
+function getRecipe(recipeId) {
+  assertTeacher_();
+  const recipe = findRecord_(SHEETS.RECIPES, "recipe_id", recipeId);
+  if (!recipe) throw new Error("Recipe not found.");
+  return {
+    recipe: enrichRecipe_(recipe),
+    versions: records_(SHEETS.RECIPE_VERSIONS)
+      .filter(item => String(item.recipe_id) === String(recipeId))
+      .sort((a, b) => Number(b.version || 0) - Number(a.version || 0))
+      .map(({ snapshot_json, ...item }) => item)
+  };
+}
+
+function saveRecipe(input) {
+  const teacher = assertTeacher_();
+  if (!input) throw new Error("Recipe data is required.");
+  return withLock_(() => {
+    const existing = input.recipe_id ? findRecord_(SHEETS.RECIPES, "recipe_id", input.recipe_id) : null;
+    if (input.recipe_id && !existing) throw new Error("Recipe not found.");
+    if (existing && existing.status === "Archived") throw new Error("Restore this recipe before editing it.");
+    const normalized = normalizeRecipeInput_(input);
+    if (!normalized.name) throw new Error("Recipe name is required.");
+    const now = new Date().toISOString();
+    const recipeId = existing ? existing.recipe_id : id_("rcp");
+    const version = Number(existing && existing.current_version || 0) + 1;
+    const record = Object.assign({}, normalized, {
+      recipe_id: recipeId, status: "Draft", current_version: version,
+      created_at: existing ? existing.created_at : now,
+      created_by: existing ? existing.created_by : teacher.email,
+      updated_at: now, updated_by: teacher.email
+    });
+    const snapshot = recipeSnapshotFromRecord_(record, version, "Draft");
+    appendRecord_(SHEETS.RECIPE_VERSIONS, {
+      recipe_version_id: id_("rcpv"), recipe_id: recipeId, version, status: "Draft",
+      created_at: now, created_by: teacher.email, change_note: clean_(input.change_note || "Draft saved", 1000),
+      snapshot_json: JSON.stringify(snapshot)
+    });
+    if (existing) updateRecord_(SHEETS.RECIPES, "recipe_id", recipeId, record);
+    else appendRecord_(SHEETS.RECIPES, record);
+    audit_(teacher.email, existing ? "update" : "create", "recipe", recipeId, { version, status: "Draft" });
+    return enrichRecipe_(findRecord_(SHEETS.RECIPES, "recipe_id", recipeId));
+  });
+}
+
+function approveRecipe(recipeId, note) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const recipe = findRecord_(SHEETS.RECIPES, "recipe_id", recipeId);
+    if (!recipe) throw new Error("Recipe not found.");
+    if (recipe.status === "Archived") throw new Error("Restore this recipe before approving it.");
+    const issues = recipeApprovalIssues_(recipe);
+    if (issues.length) throw new Error(`Cannot approve recipe: ${issues.join("; ")}`);
+    if (recipe.status === "Approved") throw new Error("This recipe version is already approved.");
+    const version = Number(recipe.current_version || 0) + 1;
+    const now = new Date().toISOString();
+    const snapshot = recipeSnapshotFromRecord_(recipe, version, "Approved");
+    appendRecord_(SHEETS.RECIPE_VERSIONS, {
+      recipe_version_id: id_("rcpv"), recipe_id: recipeId, version, status: "Approved",
+      created_at: now, created_by: teacher.email, change_note: clean_(note || "Approved for event use", 1000),
+      snapshot_json: JSON.stringify(snapshot)
+    });
+    updateRecord_(SHEETS.RECIPES, "recipe_id", recipeId, {
+      status: "Approved", current_version: version, updated_at: now, updated_by: teacher.email
+    });
+    audit_(teacher.email, "approve", "recipe", recipeId, { version, note: clean_(note, 1000) });
+    return enrichRecipe_(findRecord_(SHEETS.RECIPES, "recipe_id", recipeId));
+  });
+}
+
+function archiveRecipe(recipeId, reason) {
+  const teacher = assertTeacher_();
+  const explanation = clean_(reason, 1000);
+  if (!explanation) throw new Error("An archive reason is required.");
+  return withLock_(() => {
+    const recipe = findRecord_(SHEETS.RECIPES, "recipe_id", recipeId);
+    if (!recipe) throw new Error("Recipe not found.");
+    if (recipe.status === "Archived") return enrichRecipe_(recipe);
+    const now = new Date().toISOString();
+    updateRecord_(SHEETS.RECIPES, "recipe_id", recipeId, { status: "Archived", updated_at: now, updated_by: teacher.email });
+    audit_(teacher.email, "archive", "recipe", recipeId, { reason: explanation, version: Number(recipe.current_version || 0) });
+    return enrichRecipe_(findRecord_(SHEETS.RECIPES, "recipe_id", recipeId));
+  });
+}
+
+function restoreRecipe(recipeId) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const recipe = findRecord_(SHEETS.RECIPES, "recipe_id", recipeId);
+    if (!recipe) throw new Error("Recipe not found.");
+    if (recipe.status !== "Archived") throw new Error("Only an archived recipe can be restored.");
+    const now = new Date().toISOString();
+    updateRecord_(SHEETS.RECIPES, "recipe_id", recipeId, { status: "Draft", updated_at: now, updated_by: teacher.email });
+    audit_(teacher.email, "restore", "recipe", recipeId, { version: Number(recipe.current_version || 0) });
+    return enrichRecipe_(findRecord_(SHEETS.RECIPES, "recipe_id", recipeId));
+  });
+}
+
+function attachRecipeToEvent(eventId, recipeId, menuItemName, requiredQuantity, overagePercent) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before attaching recipes.");
+    const recipe = findRecord_(SHEETS.RECIPES, "recipe_id", recipeId);
+    if (!recipe || recipe.status !== "Approved") throw new Error("Choose a currently approved recipe.");
+    const itemName = clean_(menuItemName, 300);
+    const menu = normalizeMenu_(parseJson_(event.menu_json, []));
+    const menuItem = menu.find(item => String(item.name).toLowerCase() === itemName.toLowerCase());
+    if (!menuItem) throw new Error("Save this menu item on the event before attaching a recipe.");
+    const required = positiveNumber_(requiredQuantity || menuItem.required || event.guest_count, 0);
+    if (!required) throw new Error("Required production quantity must be greater than zero.");
+    const overage = boundedNumber_(overagePercent, 0, 100, 0);
+    const now = new Date().toISOString();
+    const existing = eventRecipeRecords_(eventId, true).find(item => String(item.menu_item_name).toLowerCase() === itemName.toLowerCase());
+    const record = {
+      event_recipe_id: existing ? existing.event_recipe_id : id_("er"), event_id: eventId,
+      menu_item_name: menuItem.name, recipe_id: recipeId, recipe_version: Number(recipe.current_version || 0),
+      required_quantity: required, overage_percent: overage,
+      snapshot_json: JSON.stringify(recipeSnapshotFromRecord_(recipe, Number(recipe.current_version || 0), "Approved")),
+      active: "TRUE", attached_at: existing ? existing.attached_at : now,
+      attached_by: existing ? existing.attached_by : teacher.email, updated_at: now, updated_by: teacher.email
+    };
+    if (existing) updateRecord_(SHEETS.EVENT_RECIPES, "event_recipe_id", existing.event_recipe_id, record);
+    else appendRecord_(SHEETS.EVENT_RECIPES, record);
+    markEventOperationalChange_(event, teacher.email);
+    audit_(teacher.email, existing ? "refresh_recipe" : "attach_recipe", "event", eventId, { eventRecipeId: record.event_recipe_id, recipeId, recipeVersion: record.recipe_version, menuItemName: record.menu_item_name });
+    return enrichEventRecipe_(findRecord_(SHEETS.EVENT_RECIPES, "event_recipe_id", record.event_recipe_id));
+  });
+}
+
+function detachRecipeFromEvent(eventRecipeId, reason) {
+  const teacher = assertTeacher_();
+  const explanation = clean_(reason, 1000);
+  if (!explanation) throw new Error("A reason is required to detach a recipe.");
+  return withLock_(() => {
+    const attachment = findRecord_(SHEETS.EVENT_RECIPES, "event_recipe_id", eventRecipeId);
+    if (!attachment || String(attachment.active).toUpperCase() === "FALSE") throw new Error("Event recipe attachment not found.");
+    const event = findRecord_(SHEETS.EVENTS, "event_id", attachment.event_id);
+    if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before detaching recipes.");
+    const now = new Date().toISOString();
+    updateRecord_(SHEETS.EVENT_RECIPES, "event_recipe_id", eventRecipeId, { active: "FALSE", updated_at: now, updated_by: teacher.email });
+    markEventOperationalChange_(event, teacher.email);
+    audit_(teacher.email, "detach_recipe", "event", event.event_id, { eventRecipeId, recipeId: attachment.recipe_id, reason: explanation });
+    return { ok: true };
   });
 }
 
@@ -301,24 +465,21 @@ function publishEvent(eventId) {
     if (issues.length) throw new Error(`Cannot publish: ${issues.join("; ")}`);
     const revision = Number(event.revision || 0) + 1;
     const publishedAt = new Date().toISOString();
-    const publicEvent = sanitizePublicEvent_(Object.assign({}, event, { revision, published_at: publishedAt }));
+    const publicEvent = sanitizePublicEvent_(Object.assign({}, event, { revision, published_at: publishedAt }), eventRecipeRecords_(eventId));
     const publishedEvents = latestSnapshot_().events.filter(item => item.id !== publicEvent.id);
     publishedEvents.push(publicEvent);
     publishedEvents.sort((a, b) => String(a.serviceDate || "").localeCompare(String(b.serviceDate || "")));
     const publicationSequence = records_(SHEETS.PUBLICATIONS).length + 1;
     const action = publicationStatus_(event) === "Unpublished" ? "republish" : (Number(event.revision || 0) ? "revise" : "publish");
+    const publicationId = id_("pub");
+    const fullSnapshot = {
+      schemaVersion: 3, revision: publicationSequence, publicationSequence,
+      publishedAt, events: publishedEvents, yearArchive: [], action
+    };
     const publication = {
-      publication_id: id_("pub"), event_id: eventId, revision,
+      publication_id: publicationId, event_id: eventId, revision,
       published_at: publishedAt, published_by: teacher.email,
-      snapshot_json: JSON.stringify({
-        schemaVersion: 2,
-        revision: publicationSequence,
-        publicationSequence,
-        publishedAt,
-        events: publishedEvents,
-        yearArchive: [],
-        action
-      }),
+      snapshot_json: persistPublicationItems_(publicationId, publicationSequence, fullSnapshot),
       action, reason: ""
     };
     assertSnapshotFits_(publication.snapshot_json);
@@ -329,7 +490,7 @@ function publishEvent(eventId) {
       unpublished_at: "", unpublished_by: "", updated_at: publishedAt, updated_by: teacher.email
     });
     audit_(teacher.email, action, "event", eventId, { revision, publicationId: publication.publication_id });
-    return { ok: true, revision, publishedAt, snapshot: JSON.parse(publication.snapshot_json) };
+    return { ok: true, revision, publishedAt, snapshot: fullSnapshot };
   });
 }
 
@@ -338,7 +499,7 @@ function getPublicationPreview(eventId) {
   const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
   if (!event) throw new Error("Event not found.");
   return {
-    event: sanitizePublicEvent_(event),
+    event: sanitizePublicEvent_(event, eventRecipeRecords_(eventId)),
     issues: publicationIssues_(event),
     nextRevision: Number(event.revision || 0) + 1,
     excluded: ["request contact information", "private review notes", "budgets and supplier data", "student identities and academic records", "staff audit details"]
@@ -357,13 +518,15 @@ function unpublishEvent(eventId, reason) {
     const snapshot = latestSnapshot_();
     const publishedEvents = snapshot.events.filter(item => String(item.id) !== String(eventId));
     const publicationSequence = records_(SHEETS.PUBLICATIONS).length + 1;
+    const publicationId = id_("pub");
+    const fullSnapshot = {
+      schemaVersion: 3, revision: publicationSequence, publicationSequence,
+      publishedAt: changedAt, events: publishedEvents, yearArchive: [], action: "unpublish"
+    };
     const publication = {
-      publication_id: id_("pub"), event_id: eventId, revision: Number(event.revision || 0),
+      publication_id: publicationId, event_id: eventId, revision: Number(event.revision || 0),
       published_at: changedAt, published_by: teacher.email,
-      snapshot_json: JSON.stringify({
-        schemaVersion: 2, revision: publicationSequence, publicationSequence,
-        publishedAt: changedAt, events: publishedEvents, yearArchive: [], action: "unpublish"
-      }),
+      snapshot_json: persistPublicationItems_(publicationId, publicationSequence, fullSnapshot),
       action: "unpublish", reason: explanation
     };
     assertSnapshotFits_(publication.snapshot_json);
@@ -374,7 +537,7 @@ function unpublishEvent(eventId, reason) {
       updated_at: changedAt, updated_by: teacher.email
     });
     audit_(teacher.email, "unpublish", "event", eventId, { reason: explanation, publicationId: publication.publication_id });
-    return { ok: true, unpublishedAt: changedAt, snapshot: JSON.parse(publication.snapshot_json) };
+    return { ok: true, unpublishedAt: changedAt, snapshot: fullSnapshot };
   });
 }
 
@@ -494,6 +657,23 @@ function generateEventDocument(eventId) {
     if (task.qualityControls && task.qualityControls.length) body.appendParagraph(`Quality controls: ${task.qualityControls.join(" · ")}`);
     if (task.handoff) body.appendParagraph(`Handoff: ${task.handoff}`);
   });
+  const eventRecipes = eventRecipeRecords_(eventId).map(enrichEventRecipe_);
+  if (eventRecipes.length) {
+    body.appendParagraph("Scaled approved recipes").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    eventRecipes.forEach(attachment => {
+      const recipe = attachment.scaled_recipe;
+      body.appendParagraph(`${attachment.menu_item_name} · ${recipe.name} · Version ${attachment.recipe_version}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+      body.appendParagraph(`Production target: ${recipe.yield}${recipe.portion ? ` · Portion: ${recipe.portion}` : ""}`);
+      body.appendParagraph("Ingredients").setHeading(DocumentApp.ParagraphHeading.HEADING2);
+      recipe.ingredients.forEach(item => body.appendListItem(item));
+      body.appendParagraph("Procedure").setHeading(DocumentApp.ParagraphHeading.HEADING2);
+      recipe.procedure.forEach(step => body.appendListItem(step));
+      if (recipe.equipment.length) body.appendParagraph(`Equipment: ${recipe.equipment.join(", ")}`);
+      if (recipe.qualityControls.length) body.appendParagraph(`Quality controls: ${recipe.qualityControls.join(" · ")}`);
+      if (recipe.allergens) body.appendParagraph(`Allergens: ${recipe.allergens}`);
+      if (recipe.safetyControls) body.appendParagraph(`Safety: ${recipe.safetyControls}`);
+    });
+  }
   doc.saveAndClose();
   const folderId = PropertiesService.getScriptProperties().getProperty("DOCUMENT_FOLDER_ID");
   const file = DriveApp.getFileById(doc.getId());
@@ -507,8 +687,13 @@ function generateEventDocument(eventId) {
   return record;
 }
 
-function sanitizePublicEvent_(event) {
+function sanitizePublicEvent_(event, eventRecipes) {
+  const attachments = (Array.isArray(eventRecipes) ? eventRecipes : []).map(enrichEventRecipe_);
   const tasks = normalizeTasks_(parseJson_(event.tasks_json, event.tasks || []));
+  const menu = normalizeMenu_(parseJson_(event.menu_json, event.menu || [])).map(item => {
+    const attachment = attachments.find(value => String(value.menu_item_name).toLowerCase() === String(item.name).toLowerCase());
+    return attachment ? Object.assign({}, item, { recipeVersion: Number(attachment.recipe_version || 0), hasApprovedRecipe: true, recipe: attachment.scaled_recipe }) : item;
+  });
   return {
     id: String(event.event_id || event.id || ""),
     name: clean_(event.event_name || event.name, 200),
@@ -522,7 +707,7 @@ function sanitizePublicEvent_(event) {
     allergens: clean_(event.allergens, 4000),
     learningFocus: clean_(event.learning_focus, 2000),
     safetyControls: clean_(event.safety_controls, 4000),
-    menu: normalizeMenu_(parseJson_(event.menu_json, event.menu || [])),
+    menu,
     tasks,
     stage: "Published",
     version: Number(event.revision || 0),
@@ -551,6 +736,116 @@ function normalizeTasks_(tasks) {
     qualityControls: list_(task.qualityControls, 30, 300),
     handoff: clean_(task.handoff || task.dependency, 500)
   })).filter(task => task.name);
+}
+
+function normalizeRecipeInput_(input) {
+  const ingredients = Array.isArray(input.ingredients) ? input.ingredients : [];
+  return {
+    name: clean_(input.name, 300), category: clean_(input.category, 100),
+    standard_yield_quantity: positiveNumber_(input.standard_yield_quantity, 0),
+    standard_yield_unit: clean_(input.standard_yield_unit, 100), portion_size: clean_(input.portion_size, 200),
+    allergens: clean_(input.allergens, 2000), competencies: clean_(input.competencies, 2000),
+    ingredients_json: JSON.stringify(ingredients.slice(0, 200).map(item => ({
+      name: clean_(item && item.name, 300), quantity: positiveNumber_(item && item.quantity, 0),
+      unit: clean_(item && item.unit, 100), preparation: clean_(item && item.preparation, 300)
+    })).filter(item => item.name)),
+    equipment_json: JSON.stringify(list_(input.equipment, 100, 200)),
+    procedure_json: JSON.stringify(list_(input.procedure, 200, 1000)),
+    safety_controls: clean_(input.safety_controls, 4000),
+    quality_controls_json: JSON.stringify(list_(input.quality_controls, 100, 500))
+  };
+}
+
+function recipeSnapshotFromRecord_(recipe, version, status) {
+  return {
+    schemaVersion: 1, recipeId: String(recipe.recipe_id || ""), version: Number(version || recipe.current_version || 0),
+    status: status || recipe.status || "Draft", name: clean_(recipe.name, 300), category: clean_(recipe.category, 100),
+    standardYieldQuantity: positiveNumber_(recipe.standard_yield_quantity, 0),
+    standardYieldUnit: clean_(recipe.standard_yield_unit, 100), portionSize: clean_(recipe.portion_size, 200),
+    allergens: clean_(recipe.allergens, 2000), competencies: clean_(recipe.competencies, 2000),
+    ingredients: normalizeRecipeIngredients_(parseJson_(recipe.ingredients_json, [])),
+    equipment: list_(parseJson_(recipe.equipment_json, []), 100, 200),
+    procedure: list_(parseJson_(recipe.procedure_json, []), 200, 1000),
+    safetyControls: clean_(recipe.safety_controls, 4000),
+    qualityControls: list_(parseJson_(recipe.quality_controls_json, []), 100, 500)
+  };
+}
+
+function normalizeRecipeIngredients_(ingredients) {
+  if (!Array.isArray(ingredients)) return [];
+  return ingredients.slice(0, 200).map(item => ({
+    name: clean_(item && item.name, 300), quantity: positiveNumber_(item && item.quantity, 0),
+    unit: clean_(item && item.unit, 100), preparation: clean_(item && item.preparation, 300)
+  })).filter(item => item.name);
+}
+
+function recipeApprovalIssues_(recipe) {
+  const issues = [];
+  if (!String(recipe.name || "").trim()) issues.push("name is missing");
+  if (!positiveNumber_(recipe.standard_yield_quantity, 0)) issues.push("standard yield must be greater than zero");
+  if (!String(recipe.standard_yield_unit || "").trim()) issues.push("yield unit is missing");
+  if (!normalizeRecipeIngredients_(parseJson_(recipe.ingredients_json, [])).length) issues.push("ingredients are empty");
+  if (!list_(parseJson_(recipe.procedure_json, []), 200, 1000).length) issues.push("procedure is empty");
+  return issues;
+}
+
+function enrichRecipe_(recipe) {
+  return Object.assign({}, recipe, {
+    ingredients: normalizeRecipeIngredients_(parseJson_(recipe.ingredients_json, [])),
+    equipment: list_(parseJson_(recipe.equipment_json, []), 100, 200),
+    procedure: list_(parseJson_(recipe.procedure_json, []), 200, 1000),
+    quality_controls: list_(parseJson_(recipe.quality_controls_json, []), 100, 500),
+    approval_issues: recipeApprovalIssues_(recipe)
+  });
+}
+
+function recipeSummaries_() {
+  return records_(SHEETS.RECIPES).map(recipe => ({
+    recipe_id: recipe.recipe_id, name: recipe.name, category: recipe.category, status: recipe.status,
+    current_version: Number(recipe.current_version || 0), standard_yield_quantity: positiveNumber_(recipe.standard_yield_quantity, 0),
+    standard_yield_unit: recipe.standard_yield_unit, portion_size: recipe.portion_size, allergens: recipe.allergens,
+    updated_at: recipe.updated_at, approval_issues: recipeApprovalIssues_(recipe)
+  })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+function eventRecipeRecords_(eventId, includeInactive) {
+  return records_(SHEETS.EVENT_RECIPES).filter(item => String(item.event_id) === String(eventId) && (includeInactive || String(item.active || "TRUE").toUpperCase() !== "FALSE"));
+}
+
+function enrichEventRecipe_(attachment) {
+  return Object.assign({}, attachment, { scaled_recipe: scaleRecipeSnapshot_(attachment) });
+}
+
+function scaleRecipeSnapshot_(attachment) {
+  const recipe = parseJson_(attachment.snapshot_json, {});
+  const standardYield = positiveNumber_(recipe.standardYieldQuantity, 0);
+  const required = positiveNumber_(attachment.required_quantity, 0);
+  const overage = boundedNumber_(attachment.overage_percent, 0, 100, 0);
+  const productionTarget = required * (1 + overage / 100);
+  const factor = standardYield ? productionTarget / standardYield : 0;
+  const ingredients = normalizeRecipeIngredients_(recipe.ingredients || []).map(item => {
+    const scaled = roundQuantity_(item.quantity * factor);
+    return [scaled || "", item.unit, item.name, item.preparation ? `(${item.preparation})` : ""].filter(value => value !== "").join(" ");
+  });
+  return {
+    name: clean_(recipe.name, 300), version: Number(recipe.version || attachment.recipe_version || 0),
+    yield: `${roundQuantity_(productionTarget)} ${clean_(recipe.standardYieldUnit, 100)}`.trim(),
+    portion: clean_(recipe.portionSize, 200), ingredients,
+    equipment: list_(recipe.equipment, 100, 200), procedure: list_(recipe.procedure, 200, 1000),
+    allergens: clean_(recipe.allergens, 2000), safetyControls: clean_(recipe.safetyControls, 4000),
+    qualityControls: list_(recipe.qualityControls, 100, 500), competencies: clean_(recipe.competencies, 2000),
+    scaleFactor: roundQuantity_(factor), overagePercent: overage
+  };
+}
+
+function markEventOperationalChange_(event, actor) {
+  const currentPublication = publicationStatus_(event);
+  const nextPublication = currentPublication === "Published" ? "Revised draft" : currentPublication;
+  const now = new Date().toISOString();
+  updateRecord_(SHEETS.EVENTS, "event_id", event.event_id, {
+    publication_status: nextPublication, stage: displayStage_(eventLifecycle_(event), nextPublication),
+    updated_at: now, updated_by: actor
+  });
 }
 
 function publicationIssues_(event) {
@@ -592,7 +887,32 @@ function latestSnapshot_() {
     .sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)) || Number(a._row || 0) - Number(b._row || 0));
   if (!publications.length) return { schemaVersion: 2, revision: 0, publicationSequence: 0, publishedAt: "", events: [], yearArchive: [] };
   const snapshot = parseJson_(publications[publications.length - 1].snapshot_json, {});
+  if (snapshot && snapshot.storage === "PublicationItems" && snapshot.publicationId) {
+    const events = records_(SHEETS.PUBLICATION_ITEMS)
+      .filter(item => String(item.publication_id) === String(snapshot.publicationId))
+      .map(item => parseJson_(item.event_json, null))
+      .filter(Boolean);
+    if (events.length !== Number(snapshot.eventCount || 0)) throw new Error("The latest publication item snapshot is incomplete. Publishing has been stopped to preserve the current student view.");
+    return Object.assign({}, snapshot, { events });
+  }
   return snapshot && Array.isArray(snapshot.events) ? snapshot : { schemaVersion: 2, revision: 0, publicationSequence: 0, publishedAt: "", events: [], yearArchive: [] };
+}
+
+function persistPublicationItems_(publicationId, publicationSequence, fullSnapshot) {
+  (fullSnapshot.events || []).forEach(event => {
+    const json = JSON.stringify(event);
+    assertSnapshotFits_(json);
+    appendRecord_(SHEETS.PUBLICATION_ITEMS, {
+      publication_item_id: id_("pubitem"), publication_id: publicationId,
+      publication_sequence: publicationSequence, event_id: event.id, event_json: json
+    });
+  });
+  return JSON.stringify({
+    schemaVersion: 3, revision: publicationSequence, publicationSequence,
+    publishedAt: fullSnapshot.publishedAt, events: [], yearArchive: fullSnapshot.yearArchive || [],
+    action: fullSnapshot.action || "publish", storage: "PublicationItems", publicationId,
+    eventCount: (fullSnapshot.events || []).length
+  });
 }
 
 function eventLifecycle_(event) {
@@ -694,6 +1014,9 @@ function findRecord_(sheetName, key, value) {
 }
 
 function updateRecord_(sheetName, key, value, patch) {
+  if ([SHEETS.PUBLICATIONS, SHEETS.PUBLICATION_ITEMS, SHEETS.RECIPE_VERSIONS, SHEETS.AUDIT].includes(sheetName)) {
+    throw new Error(`${sheetName} is append-only.`);
+  }
   const record = findRecord_(sheetName, key, value);
   if (!record) throw new Error(`${sheetName} record not found.`);
   const headers = HEADERS[sheetName];
@@ -720,6 +1043,9 @@ function audit_(actor, action, recordType, recordId, detail) {
 function id_(prefix) { return `${prefix}-${Utilities.getUuid()}`; }
 function clean_(value, max) { return String(value == null ? "" : value).trim().slice(0, max || 1000); }
 function positiveInteger_(value, fallback) { const number = Math.floor(Number(value)); return number > 0 ? number : Number(fallback || 0); }
+function positiveNumber_(value, fallback) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : Number(fallback || 0); }
+function boundedNumber_(value, min, max, fallback) { const number = Number(value); return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : Number(fallback || 0); }
+function roundQuantity_(value) { const number = Number(value); return Number.isFinite(number) ? Math.round(number * 1000) / 1000 : 0; }
 function parseJson_(value, fallback) { try { return typeof value === "string" ? JSON.parse(value || "null") || fallback : (value || fallback); } catch (_) { return fallback; } }
 function list_(value, limit, max) { const items = Array.isArray(value) ? value : String(value || "").split(/\n|,/); return items.map(item => clean_(item, max)).filter(Boolean).slice(0, limit); }
 function menuFromText_(value) { return String(value || "").split(/\n|,/).map(name => ({ name: clean_(name, 300), required: 0 })).filter(item => item.name); }

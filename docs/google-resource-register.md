@@ -26,3 +26,6 @@ Keep this file as a local setup worksheet. Do **not** commit completed IDs, priv
 | Published revision appears after manual refresh | |
 | Generated Event Order lands in correct folder | |
 | Public JSON contains no private or student data | |
+| Recipe and publication-item tabs created by `initializeWorkbook()` | |
+| Approved recipe scales correctly on test event | |
+| Master edit leaves pinned event recipe unchanged | |

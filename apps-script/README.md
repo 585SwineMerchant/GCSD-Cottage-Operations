@@ -102,7 +102,7 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, full request queue, event workspaces, separate operational/publication states, structured validation, publication preview and immutable history, unpublish/republish, clone, archive/restore, document history, and event audit history. Menu scaling, recipe-library management, purchasing, the full production planner, budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
+The protected application now includes the operations dashboard, full request queue, event workspaces, separate operational/publication states, structured validation, publication preview and immutable history, unpublish/republish, clone, archive/restore, document history, event audit history, and the Recipe Library. Recipe drafts and approvals are versioned; approved versions can be pinned and scaled on an event. Costing, purchasing, the full production planner, budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
 
 ## Upgrade an existing pilot workbook
 
@@ -112,6 +112,17 @@ After replacing the teacher project files, run this once before creating the new
 initializeWorkbook();
 ```
 
-The migration accepts the existing managed headers as an exact prefix, appends the new columns, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
+The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the `Recipes`, `RecipeVersions`, `EventRecipes`, and `PublicationItems` tabs, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
+
+## Recipe Library workflow
+
+1. Open **Recipes** in the Teacher Command Center and create a draft.
+2. Record its standard yield, yield unit, ingredients, procedure, equipment, allergen information, safety controls, quality controls, and curriculum competencies.
+3. Save the draft and approve it for event use.
+4. In an Event workspace, save the menu item first.
+5. Under **Menu & production**, attach the approved recipe to the matching menu item, enter the required production quantity, and set the overage percentage.
+6. Preview and publish. The student site and generated Event Order use the pinned, scaled version.
+
+Editing the master recipe later does not alter the event attachment. Approve the revision and use **Attach or refresh approved version** when an event should deliberately adopt it.
 
 For a click-by-click protected-account session, use [`../docs/weekend-google-setup.md`](../docs/weekend-google-setup.md).

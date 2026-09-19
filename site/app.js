@@ -28,7 +28,11 @@
   }
 
   function eventHtml(event) {
-    const tasks = (event.tasks || []).filter(task => teamFilter === "all" || String(task.teamLabel || "Team") === teamFilter);
+    const menu = event.menu || [];
+    const tasks = (event.tasks || []).filter(task => teamFilter === "all" || String(task.teamLabel || "Team") === teamFilter).map(task => ({
+      ...task,
+      recipe: task.recipe || menu.find(item => String(item.name || "").toLowerCase() === String(task.name || "").toLowerCase())?.recipe
+    }));
     return `<article class="event">
       <header class="event-header"><div><span>Revision ${Number(event.version || snapshot.revision || 0)} · Published</span><h2>${esc(event.name)}</h2><p>${esc(event.clientDisplayName || "Private event")}</p></div><strong>${dateLabel(event.serviceDate)}<br>${esc(event.serviceTime || "Time pending")}</strong></header>
       <div class="brief">
@@ -39,7 +43,7 @@
         <div><span>Learning focus</span><strong>${esc(event.learningFocus || "Teacher will identify the event-level focus")}</strong></div>
         <div><span>Safety and sanitation controls</span><strong>${esc(event.safetyControls || "Follow the approved kitchen safety plan")}</strong></div>
       </div>
-      <div class="menu">${(event.menu || []).map(item => `<span>${esc(item.name)}${Number(item.required || 0) ? ` · ${Number(item.required)}` : ""}${item.portion ? ` · ${esc(item.portion)}` : ""}</span>`).join("")}</div>
+      <div class="menu">${menu.map(item => item.recipe ? `<button class="secondary" type="button" data-menu-recipe-event="${esc(event.id)}" data-menu-recipe-name="${esc(item.name)}">${esc(item.name)}${Number(item.required || 0) ? ` · ${Number(item.required)}` : ""} · Recipe v${Number(item.recipeVersion || item.recipe.version || 0)}</button>` : `<span>${esc(item.name)}${Number(item.required || 0) ? ` · ${Number(item.required)}` : ""}${item.portion ? ` · ${esc(item.portion)}` : ""}</span>`).join("")}</div>
       <div class="tasks-heading"><div><p class="eyebrow">Production assignments</p><h3>${teamFilter === "all" ? "All teams and stations" : esc(teamFilter)}</h3></div><button class="secondary" type="button" data-print-event="${esc(event.id)}">Print packet</button></div>
       <div class="tasks">${tasks.length ? tasks.map(task => taskHtml(task, event.id)).join("") : "<p>No assignments match this filter.</p>"}</div>
     </article>`;
@@ -115,11 +119,13 @@
     }
   }
 
-  function openRecipe(eventId, taskId) {
+  function openRecipe(eventId, taskId, menuName) {
     const event = (snapshot.events || []).find(item => item.id === eventId);
-    const recipe = event?.tasks?.find(item => item.id === taskId)?.recipe;
+    const task = event?.tasks?.find(item => item.id === taskId);
+    const menuItem = event?.menu?.find(item => String(item.name || "").toLowerCase() === String(menuName || task?.name || "").toLowerCase());
+    const recipe = task?.recipe || menuItem?.recipe;
     if (!recipe) return;
-    q("#recipeContent").innerHTML = `<p class="eyebrow">Teacher-approved production recipe</p><h2>${esc(recipe.name)}</h2><p>${esc([recipe.yield && `Yield ${recipe.yield}`, recipe.portion && `Portion ${recipe.portion}`].filter(Boolean).join(" · "))}</p><div class="recipe-grid"><section><h3>Ingredients</h3><ul>${list(recipe.ingredients).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Equipment</h3><ul>${list(recipe.equipment).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Procedure</h3><ol>${list(recipe.procedure).map(item => `<li>${esc(item)}</li>`).join("")}</ol></section></div><p><strong>Allergens:</strong> ${esc(recipe.allergens || "See Event Order")}</p>`;
+    q("#recipeContent").innerHTML = `<p class="eyebrow">Teacher-approved production recipe · Version ${Number(recipe.version || 0)}</p><h2>${esc(recipe.name)}</h2><p>${esc([recipe.yield && `Yield ${recipe.yield}`, recipe.portion && `Portion ${recipe.portion}`, recipe.overagePercent && `${recipe.overagePercent}% production overage`].filter(Boolean).join(" · "))}</p><div class="recipe-grid"><section><h3>Ingredients</h3><ul>${list(recipe.ingredients).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Equipment</h3><ul>${list(recipe.equipment).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Procedure</h3><ol>${list(recipe.procedure).map(item => `<li>${esc(item)}</li>`).join("")}</ol></section><section><h3>Quality controls</h3><ul>${list(recipe.qualityControls).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section></div><p><strong>Allergens:</strong> ${esc(recipe.allergens || "See Event Order")}</p><p><strong>Safety controls:</strong> ${esc(recipe.safetyControls || "Follow the approved kitchen safety plan")}</p>${recipe.competencies?`<p><strong>Learning focus:</strong> ${esc(recipe.competencies)}</p>`:""}`;
     q("#recipeDialog").showModal();
   }
 
@@ -137,6 +143,8 @@
   document.addEventListener("click", event => {
     const recipe = event.target.closest("[data-recipe-task]");
     if (recipe) openRecipe(recipe.dataset.recipeEvent, recipe.dataset.recipeTask);
+    const menuRecipe = event.target.closest("[data-menu-recipe-event]");
+    if (menuRecipe) openRecipe(menuRecipe.dataset.menuRecipeEvent, "", menuRecipe.dataset.menuRecipeName);
     const print = event.target.closest("[data-print-event]");
     if (print) printEvent(print.dataset.printEvent);
   });

@@ -12,6 +12,15 @@
 | Generated documents | New `Generated Event Documents` folder under the project folder | Drive permissions | Event packet records |
 | Student identity and academic work | Google Classroom | Course membership | Classroom record |
 
+The operational workbook also contains three recipe-specific tabs:
+
+| Tab | Responsibility |
+|---|---|
+| `Recipes` | Current working recipe records and approval state |
+| `RecipeVersions` | Append-only snapshots of every saved and approved version |
+| `EventRecipes` | Approved versions pinned to event menu items, including production quantity and overage |
+| `PublicationItems` | Append-only, one-event-per-row payloads for schema-three public snapshots |
+
 ## Data flow
 
 1. A requester submits the district Google Form.
@@ -46,6 +55,21 @@ The protected teacher application is organized into:
 - Event workspaces for overview, source request, menu/production, documents, publication, and audit
 - Structured publication blockers and warnings
 - Preview, publish/revise, unpublish, republish, clone, archive, and restore controls
+- Searchable Recipe Library with draft, approved, archived, and restored states
+- Standard yields, portions, ingredients, procedures, equipment, allergens, safety controls, quality controls, and curriculum competencies
+- Approved recipe attachment to event menu items with automatic scaling and production overage
+
+## Recipe version contract
+
+Every recipe save creates an immutable version snapshot. Approval creates a new approved version. Editing an approved master recipe creates a new draft; it does not modify the approved version already attached to an event.
+
+An `EventRecipes` record contains its own approved recipe snapshot. Event scaling uses:
+
+`production target = required quantity × (1 + overage percentage ÷ 100)`
+
+Ingredient quantities are multiplied by the production target divided by the recipe's standard yield. Refreshing an event attachment to a newly approved master version is an explicit teacher action and marks a currently published event as a revised draft. Detaching a recipe is also explicit and preserves earlier publication snapshots.
+
+Schema-three publications store each sanitized event in `PublicationItems` and keep only a small pointer in `Publications.snapshot_json`. This preserves the immutable global-snapshot behavior without placing every event and recipe into one Google Sheets cell. The public feed remains backward compatible with existing schema-one and schema-two publication rows.
 
 Workbook schema changes are append-only. `initializeWorkbook()` validates that managed columns remain in their original order and appends only missing version-two columns, leaving all existing rows and publication snapshots intact.
 
@@ -55,4 +79,4 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, and Command Center foundation are complete in source. Later phases will port, in order, menu/recipe management, scaling and costing, purchasing, the full production planner, Kitchen Management documents, budgets and inventory, operational closeout, and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, and event scaling are complete in source. Later phases will add costing, purchasing, the full production planner, Kitchen Management documents, budgets and inventory, operational closeout, and Recipe Studio export/import.

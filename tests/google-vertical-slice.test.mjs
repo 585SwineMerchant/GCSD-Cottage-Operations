@@ -326,3 +326,86 @@ test("dashboard foundation exposes separate lifecycle, publication, validation, 
   assert.match(html, /archiveEvent/);
   assert.match(html, /cloneEvent/);
 });
+
+test("recipe drafts, approvals, and event attachments preserve immutable approved versions", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const draft = context.saveRecipe({
+    name: "Tomato Soup", category: "Soup", standard_yield_quantity: 10, standard_yield_unit: "portions",
+    portion_size: "8 fl oz", allergens: "None declared", competencies: "Culinary math",
+    ingredients: [{ name: "Tomatoes", quantity: 2, unit: "lb", preparation: "diced", supplierPrice: 99 }],
+    equipment: ["stockpot"], procedure: ["Simmer until tender"], safety_controls: "Hold at 135°F or above",
+    quality_controls: ["Taste approved"]
+  });
+  assert.equal(draft.status, "Draft");
+  assert.equal(Number(draft.current_version), 1);
+  const approved = context.approveRecipe(draft.recipe_id, "Classroom production standard");
+  assert.equal(approved.status, "Approved");
+  assert.equal(Number(approved.current_version), 2);
+
+  context.appendRecord_("Events", operationalEvent({
+    event_id: "evt-recipe", menu_json: JSON.stringify([{ name: "Tomato Soup", required: 40 }]),
+    tasks_json: JSON.stringify([{ teamLabel: "Team A", station: "Kitchen 1", name: "Tomato Soup", quantity: "44", instructions: "Prepare soup" }])
+  }));
+  const attachment = context.attachRecipeToEvent("evt-recipe", draft.recipe_id, "Tomato Soup", 40, 10);
+  assert.equal(Number(attachment.recipe_version), 2);
+  assert.equal(attachment.scaled_recipe.yield, "44 portions");
+  assert.match(attachment.scaled_recipe.ingredients[0], /^8\.8 lb Tomatoes/);
+  assert.equal(JSON.stringify(attachment).includes("supplierPrice"), false);
+
+  const firstPublication = context.publishEvent("evt-recipe");
+  const firstRecipe = firstPublication.snapshot.events[0].menu[0].recipe;
+  assert.equal(firstRecipe.version, 2);
+  assert.match(firstRecipe.ingredients[0], /^8\.8 lb Tomatoes/);
+  assert.equal(context.records_("PublicationItems").length, 1);
+  const publicationPointer = context.parseJson_(context.records_("Publications")[0].snapshot_json, {});
+  assert.equal(publicationPointer.storage, "PublicationItems");
+  assert.equal(publicationPointer.events.length, 0);
+  const immutableVersions = context.records_("RecipeVersions").map(row => row.snapshot_json);
+
+  const edited = context.saveRecipe({
+    ...approved, ingredients: [{ name: "Tomatoes", quantity: 3, unit: "lb", preparation: "diced" }],
+    equipment: approved.equipment, procedure: approved.procedure, quality_controls: approved.quality_controls
+  });
+  assert.equal(edited.status, "Draft");
+  assert.equal(Number(edited.current_version), 3);
+  assert.throws(() => context.attachRecipeToEvent("evt-recipe", draft.recipe_id, "Tomato Soup", 40, 10), /currently approved/);
+  const pinned = context.eventRecipeRecords_("evt-recipe").map(context.enrichEventRecipe_)[0];
+  assert.equal(Number(pinned.recipe_version), 2);
+  assert.match(pinned.scaled_recipe.ingredients[0], /^8\.8 lb Tomatoes/);
+  assert.deepEqual(context.records_("RecipeVersions").slice(0, 2).map(row => row.snapshot_json), immutableVersions);
+  assert.throws(() => context.updateRecord_("RecipeVersions", "recipe_version_id", context.records_("RecipeVersions")[0].recipe_version_id, { status: "Changed" }), /append-only/);
+});
+
+test("approving a revised recipe and refreshing an attachment marks the event revised", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const draft = context.saveRecipe({ name: "Focaccia", standard_yield_quantity: 2, standard_yield_unit: "loaves", ingredients: [{ name: "Flour", quantity: 1, unit: "kg" }], procedure: ["Mix and bake"] });
+  context.approveRecipe(draft.recipe_id, "Initial approval");
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-bread", menu_json: JSON.stringify([{ name: "Focaccia", required: 6 }]), tasks_json: JSON.stringify([{ name: "Focaccia" }]) }));
+  context.attachRecipeToEvent("evt-bread", draft.recipe_id, "Focaccia", 6, 0);
+  context.publishEvent("evt-bread");
+
+  const current = context.getRecipe(draft.recipe_id).recipe;
+  context.saveRecipe({ ...current, ingredients: [{ name: "Flour", quantity: 1.2, unit: "kg" }], equipment: current.equipment, procedure: current.procedure, quality_controls: current.quality_controls });
+  const revised = context.approveRecipe(draft.recipe_id, "Hydration revision");
+  context.attachRecipeToEvent("evt-bread", draft.recipe_id, "Focaccia", 6, 0);
+  const event = context.findRecord_("Events", "event_id", "evt-bread");
+  assert.equal(event.publication_status, "Revised draft");
+  const attachment = context.eventRecipeRecords_("evt-bread").map(context.enrichEventRecipe_)[0];
+  assert.equal(Number(attachment.recipe_version), Number(revised.current_version));
+  assert.match(attachment.scaled_recipe.ingredients[0], /^3\.6 kg Flour/);
+});
+
+test("recipe library controls and student approved-recipe access are present", async () => {
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  const student = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
+  ["recipesView", "recipeWorkspace", "recipeForm", "eventRecipeList", "attachRecipeButton"].forEach(id => assert.match(teacher, new RegExp(`id="${id}"`)));
+  assert.match(teacher, /approveRecipe/);
+  assert.match(teacher, /attachRecipeToEvent/);
+  assert.match(student, /data-menu-recipe-event/);
+  assert.match(student, /Teacher-approved production recipe/);
+  assert.match(student, /Safety controls/);
+});

@@ -13,6 +13,8 @@ This is the only work that must be completed while signed into the protected GCS
 
 If the original vertical slice is already deployed, do not create replacement Google resources. Follow the update sequence in [`deployment.md`](deployment.md): replace the two Apps Script source sets, run `initializeWorkbook()` in the teacher project, and create new versions of the existing teacher and public-feed deployments. Keep their current access settings and `/exec` URLs.
 
+For the Recipe Library phase, replace the teacher Apps Script source, run `initializeWorkbook()` again to create the four new tabs, and update the existing teacher deployment. Also replace the public-feed `Code.gs` and update its existing deployment so it can read schema-three publication items. Both `/exec` URLs remain unchanged.
+
 ## 1. Create the GCSD My Drive resources
 
 In the GCSD account's **My Drive**, create this exact structure:
@@ -45,7 +47,7 @@ configureVerticalSlice({
 });
 ```
 
-Review and approve only the Google permissions requested by this newly named project. A successful run creates `Requests`, `Events`, `Publications`, `Documents`, and `Audit` tabs. The pilot requires an explicit teacher email allowlist.
+Review and approve only the Google permissions requested by this newly named project. A successful run creates `Requests`, `Events`, `Publications`, `Documents`, `Audit`, `Recipes`, `RecipeVersions`, `EventRecipes`, and `PublicationItems` tabs. The pilot requires an explicit teacher email allowlist.
 
 ## 3. Create the request Form
 

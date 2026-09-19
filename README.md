@@ -8,7 +8,9 @@ This repository is intentionally standalone. It does not share Git history, depl
 
 `Google Form request → protected teacher application → private Event Order draft → deliberate publication → read-only student site → generated Google Event Order document`
 
-The Teacher Command Center now includes a responsive operations dashboard, request queue, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, and event audit history.
+The Teacher Command Center now includes a responsive operations dashboard, request queue, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, event audit history, and an approved Recipe Library with event-level scaling.
+
+Recipe drafts and approvals create immutable versions. Attaching a recipe to an event stores the approved version with that Event Order, so later master-recipe edits cannot silently alter existing event plans or historical publications.
 
 ## Repository boundaries
 

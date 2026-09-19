@@ -45,3 +45,16 @@ The GitHub repository and Apps Script deployments are separate release targets. 
 7. Use the existing test event to verify preview, unpublish, manual student refresh, republish, clone, archive, and restore. Do not archive the published source event until it has been explicitly unpublished.
 
 The public site does not need a configuration change because both existing `/exec` URLs remain the same. Students see an unpublish or republish only after pressing **Refresh Event Data** or reopening the page.
+
+## Recipe Library update
+
+For the Recipe Library release:
+
+1. Replace the existing teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. Run `initializeWorkbook()` once. This creates `Recipes`, `RecipeVersions`, `EventRecipes`, and `PublicationItems`; it does not alter existing Event or publication rows.
+3. Create a new version of the existing GCSD-restricted teacher deployment.
+4. Keep the teacher `/exec` URL and access policy unchanged.
+5. Replace the public-feed project's `Code.gs` and create a new version of its existing anonymous deployment. Keep its `/exec` URL and permissions unchanged.
+6. GitHub Pages deploys the updated student recipe display from this repository.
+
+Verify with one small test recipe: save draft → approve → attach to the existing test event → preview scaled quantities → publish → open the recipe from the student site. Then edit the master recipe and confirm the published event continues to show the pinned version until the attachment is explicitly refreshed and republished.

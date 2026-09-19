@@ -11,6 +11,7 @@
 - Generic team/station labels
 - Equipment, quality controls, deadlines, instructions, and handoffs
 - Publication revision and timestamp
+- Approved recipe version, scaled yield, ingredients, equipment, procedure, safety controls, quality controls, and event-level competencies
 
 ## Public student snapshot must never contain
 
@@ -18,11 +19,14 @@
 - Client email address, phone number, billing data, or private correspondence
 - Internal teacher notes
 - Budgets, supplier pricing, or purchasing records
+- Master-recipe audit metadata and private version notes
 - Staff audit history
 - Recipe authorship or identifiable student submissions
 - Classroom grades or feedback
 
 The sanitizer constructs a new allowlisted object. It does not remove a few blocked fields from the private event record. Automated tests deliberately place private values in source records and confirm none survive publication.
+
+Published recipe data uses the same allowlist approach. Supplier prices, purchasing metadata, author identity, version notes, and recipe audit history are excluded. The event receives a pinned approved snapshot rather than a live reference to the working master recipe.
 
 ## Public request intake
 
