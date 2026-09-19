@@ -409,3 +409,12 @@ test("recipe library controls and student approved-recipe access are present", a
   assert.match(student, /Teacher-approved production recipe/);
   assert.match(student, /Safety controls/);
 });
+
+test("recipe attachment preserves selections across an automatic event save", async () => {
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  const handler = teacher.match(/async function attachEventRecipe\(\)\{(.+?)\}async function detachEventRecipe/s)?.[1] || "";
+  assert.ok(handler, "attachEventRecipe handler should be present");
+  assert.ok(handler.indexOf('const menuItem=q("#attachMenuItem").value') < handler.indexOf("if(state.dirty"));
+  assert.ok(handler.indexOf('recipeId=q("#attachRecipe").value') < handler.indexOf("if(state.dirty"));
+  assert.match(teacher, /eventForm"\)\.addEventListener\("input",event=>\{if\(event\.target\.name\)markDirty\(true\)\}\)/);
+});
