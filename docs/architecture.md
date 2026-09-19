@@ -7,7 +7,7 @@
 | Student production site | This repository's GitHub Pages deployment | Anonymous, read-only | Published snapshot only |
 | Teacher Command Center | Standalone Apps Script project | Approved GCSD staff | Operational Google Sheet |
 | Public publication feed | Separate Apps Script project | Anonymous, read-only | `Publications` tab only |
-| Client request intake | Google Form | Link-based submission | Restricted `Requests` tab |
+| Client request intake | Google Form | Anyone with the published link may respond; no Google login required | Restricted `Requests` tab |
 | Operational records | New Google Sheet under the GCSD account's My Drive | Approved staff | System of record |
 | Generated documents | New `Generated Event Documents` folder under the project folder | Drive permissions | Event packet records |
 | Student identity and academic work | Google Classroom | Course membership | Classroom record |
