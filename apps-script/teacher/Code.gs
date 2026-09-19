@@ -231,11 +231,13 @@ function saveEvent(input) {
       learning_focus: clean_(input.learning_focus, 2000),
       safety_controls: clean_(input.safety_controls, 4000),
       menu_json: JSON.stringify(normalizeMenu_(input.menu)),
-      tasks_json: JSON.stringify(normalizeTasks_(input.tasks)),
-      stage: existing.published_at ? "Revised draft" : "Draft",
-      updated_at: now,
-      updated_by: teacher.email
+      tasks_json: JSON.stringify(normalizeTasks_(input.tasks))
     };
+    const changed = Object.keys(patch).some(field => String(existing[field] || "") !== String(patch[field] || ""));
+    if (!changed) return existing;
+    patch.stage = existing.published_at ? "Revised draft" : "Draft";
+    patch.updated_at = now;
+    patch.updated_by = teacher.email;
     updateRecord_(SHEETS.EVENTS, "event_id", input.event_id, patch);
     audit_(teacher.email, "update", "event", input.event_id, { stage: patch.stage });
     return findRecord_(SHEETS.EVENTS, "event_id", input.event_id);
