@@ -223,11 +223,5 @@
     if (print) printEvent(print.dataset.printEvent);
   });
 
-  const teacherLink = q("#teacherCommandCenterLink");
-  if (config.teacherCommandCenterUrl) {
-    teacherLink.href = config.teacherCommandCenterUrl;
-    teacherLink.hidden = false;
-  }
-
   refresh();
 })();
