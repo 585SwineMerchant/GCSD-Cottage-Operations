@@ -10,7 +10,6 @@ export function inspectConfiguration(config) {
   const pending = [];
   for (const [key, label] of [
     ["publicFeedUrl", "Public Feed"],
-    ["teacherCommandCenterUrl", "Teacher Command Center"],
     ["recipeImportUrl", "Recipe Import"]
   ]) {
     const value = String(config?.[key] || "").trim();
@@ -42,7 +41,7 @@ async function main() {
     if (process.argv.includes("--require-connected")) process.exitCode = 2;
     return;
   }
-  console.log("All Google Apps Script /exec URLs are configured.");
+  console.log("All public student-site Apps Script /exec URLs are configured.");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(`file://${process.argv[1]}`))) {
