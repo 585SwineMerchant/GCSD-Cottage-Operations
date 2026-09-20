@@ -818,17 +818,24 @@ function parseReceiptText_(text) {
     const followingPrice = index + 1 < lines.length ? standalonePrice(lines[index + 1]) : 0;
     if ((!values.length && !followingPrice) || !/[a-z]/i.test(line)) return null;
     const price = values.length ? values[values.length - 1] : followingPrice;
-    const name = clean_(line.replace(/(?:\$\s*)?\d{1,6}(?:,\d{3})*\.\d{2}\b/g, " ").replace(/\b\d{8,14}\b/g, " ").replace(/\s+[A-Z]$/i, "").replace(/\s+/g, " ").trim(), 200);
-    if (!name || name.length < 2) return null;
-    const matched = findCatalogByName_(name, catalog);
+    const receiptName = clean_(line.replace(/(?:\$\s*)?\d{1,6}(?:,\d{3})*\.\d{2}\b/g, " ").replace(/\b\d{8,14}\b/g, " ").replace(/\s+[A-Z]$/i, "").replace(/\s+/g, " ").trim(), 200);
+    if (!receiptName || receiptName.length < 2) return null;
+    const name = /\b(?:tomato red plum|red plum tomato|roma tomato)\b/i.test(receiptName) ? "Roma tomatoes" : receiptName;
+    const matched = findExactCatalogByName_(name, catalog);
+    const missingVariableWeight = /\b(?:roma|red plum)\s+tomato|tomato\s+red\s+plum\b/i.test(name);
     return {
       id: `line-${index + 1}`, receiptText: followingPrice && !values.length ? `${line} ${lines[index + 1]}` : line, ingredientName: matched ? matched.ingredient_name : name,
       productName: matched ? matched.product_name || matched.ingredient_name : name, packagesPurchased: 1,
-      lineTotal: roundMoney_(price), packagePrice: roundMoney_(price),
+      lineTotal: roundMoney_(price), packagePrice: 0,
       packageQuantity: matched ? positiveNumber_(matched.package_quantity, 0) : 0,
       packageUnit: matched ? canonicalUnit_(matched.package_unit || matched.recipe_unit) : "",
       packageDescription: matched ? matched.package_description : "", aliasesText: matched ? (matched.aliases || []).join(", ") : "",
-      matchedPriceId: matched ? matched.price_id : "", updateCatalog: Boolean(matched)
+      matchedPriceId: matched ? matched.price_id : "", updateCatalog: false,
+      catalogLearningNote: missingVariableWeight
+        ? "Expense captured. The receipt does not show weight or price per pound, so catalog learning is skipped."
+        : matched
+          ? "Possible exact catalog match. Confirm the package count, size, unit, and package price before selecting Use for catalog."
+          : "Expense captured. No confident catalog match; the catalog will remain unchanged."
     };
   }).filter(Boolean).slice(0, 100);
   if (!lineItems.length) warnings.push("Item-level prices were not confidently detected; add them during review if catalog learning is needed.");
@@ -844,6 +851,14 @@ function findCatalogByName_(name, catalog) {
   }).filter(item => item.score).sort((a, b) => b.score - a.score || String(b.price.checked_at).localeCompare(String(a.price.checked_at)))[0]?.price || null;
 }
 
+function findExactCatalogByName_(name, catalog) {
+  const target = normalizeIngredientName_(name);
+  return (catalog || []).filter(price => {
+    const names = [price.ingredient_name, price.product_name].concat(price.aliases || parseJson_(price.aliases_json, [])).map(normalizeIngredientName_).filter(Boolean);
+    return names.includes(target);
+  }).sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at)))[0] || null;
+}
+
 function normalizeReceiptLineItems_(items) {
   if (typeof items === "string") items = parseJson_(items, []);
   if (!Array.isArray(items)) return [];
@@ -853,7 +868,8 @@ function normalizeReceiptLineItems_(items) {
     packagesPurchased: positiveNumber_(item && item.packagesPurchased, 1), lineTotal: roundMoney_(positiveOrZero_(item && item.lineTotal)),
     packagePrice: roundMoney_(positiveOrZero_(item && item.packagePrice)), packageQuantity: positiveOrZero_(item && item.packageQuantity),
     packageUnit: canonicalUnit_(item && item.packageUnit), packageDescription: clean_(item && item.packageDescription, 300),
-    aliasesText: clean_(item && item.aliasesText, 1000), matchedPriceId: clean_(item && item.matchedPriceId, 100), updateCatalog: Boolean(item && item.updateCatalog)
+    aliasesText: clean_(item && item.aliasesText, 1000), matchedPriceId: clean_(item && item.matchedPriceId, 100), updateCatalog: Boolean(item && item.updateCatalog),
+    catalogLearningNote: clean_(item && item.catalogLearningNote, 500)
   })).filter(item => item.ingredientName || item.productName);
 }
 
@@ -861,7 +877,7 @@ function updateCatalogFromReceipt_(lineItems, transaction, receiptId, actor) {
   const updates = [];
   (lineItems || []).filter(item => item.updateCatalog).forEach(item => {
     if (!item.ingredientName || !item.packageQuantity || !item.packageUnit) return;
-    const packagePrice = item.packagePrice || (item.packagesPurchased ? roundMoney_(item.lineTotal / item.packagesPurchased) : 0);
+    const packagePrice = item.packagePrice;
     if (!packagePrice) return;
     const existing = item.matchedPriceId ? findRecord_(SHEETS.INGREDIENT_PRICES, "price_id", item.matchedPriceId) : findCatalogByName_(item.ingredientName, activeIngredientPrices_());
     const now = new Date().toISOString(), date = clean_(transaction.transaction_date, 20) || now.slice(0, 10);
