@@ -443,6 +443,8 @@ test("public Recipe Studio remains local-only and exports the teacher import con
   assert.match(html, /data-student-view="studio"/);
   assert.match(html, /id="studioView"/);
   assert.match(html, /id="studioScreenshot"/);
+  assert.match(html, /id="studioRecipeUrl"/);
+  assert.match(html, /Import recipe URL/);
   assert.match(html, /id="studioCropCanvas"/);
   assert.match(html, /Read pasted recipe/);
   assert.match(html, /does not collect names, submit records, or write directly/);
@@ -450,6 +452,8 @@ test("public Recipe Studio remains local-only and exports the teacher import con
   assert.match(app, /gcsdCottageRecipeStudioV1/);
   assert.match(app, /tesseract\.js@5\/dist\/tesseract\.min\.js/);
   assert.match(app, /GCSDRecipeParser\.parseRecipeText/);
+  assert.match(app, /GCSDRecipeParser\.parseRecipeData/);
+  assert.match(app, /config\.recipeImportUrl/);
   assert.match(app, /preparedStudioImage/);
   assert.match(app, /worker\.recognize\(image\)/);
   assert.match(app, /tessedit_pageseg_mode:"6"/);
