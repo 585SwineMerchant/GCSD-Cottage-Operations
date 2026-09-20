@@ -144,7 +144,7 @@ test("public and teacher interfaces use the Cottage brand and tab identity", asy
   assert.match(teacherHtml, /The Cottage at Arcadia · private operations/);
   assert.match(teacherHtml, /assets\/cottage-logo\.png/);
   assert.match(teacherCode, /setTitle\("The Cottage at Arcadia · Teacher Command Center"\)/);
-  assert.match(teacherCode, /setFaviconUrl\("https:\/\/585swinemerchant\.github\.io\/GCSD-Cottage-Operations\/assets\/cottage-favicon\.svg"\)/);
+  assert.match(teacherCode, /setFaviconUrl\("https:\/\/585swinemerchant\.github\.io\/GCSD-Cottage-Operations\/assets\/cottage-logo\.png"\)/);
 });
 
 test("publication validation requires the minimum operational event fields", async () => {
