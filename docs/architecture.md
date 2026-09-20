@@ -7,6 +7,7 @@
 | Student production site | This repository's GitHub Pages deployment | Anonymous, read-only | Published event snapshots and sanitized planning-price catalog |
 | Teacher Command Center | Standalone Apps Script project | Approved GCSD staff | Operational Google Sheet |
 | Public publication feed | Separate Apps Script project | Anonymous, read-only | `Publications`, `PublicationItems`, and allowlisted `IngredientPrices` fields only |
+| Recipe URL import | Separate Apps Script project | Anonymous, public HTTPS fetch only | Standardized Recipe JSON-LD returned without storage |
 | Client request intake | Google Form | Anyone with the published link may respond; no Google login required | Restricted `Requests` tab |
 | Operational records | New Google Sheet under the GCSD account's My Drive | Approved staff | System of record |
 | Generated documents | New `Generated Event Documents` folder under the project folder | Drive permissions | Event packet records |
@@ -90,11 +91,11 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, Wegmans-first catalog, receipt-assisted price learning, Student Costing Lab, local-only Recipe Studio export/teacher import, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, Wegmans-first catalog, receipt-assisted price learning, Student Costing Lab, URL-assisted Recipe Studio export/teacher import, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow.
 
 ## Recipe Studio transfer contract
 
-The anonymous public application never writes recipes to the workbook. Recipe Studio work remains in browser storage and exports a versioned `gcsd-cottage-recipe-draft` JSON document without a student name, account identifier, or submission record. Copied text and browser-side screenshot OCR feed the same deterministic parser. Before OCR, the student crops the screenshot to the recipe; the browser enlarges, grayscales, and increases the contrast of that selection. The parser removes common OCR checkbox artifacts, joins wrapped recipe titles and procedure steps, proposes structured fields, and explicitly reports missing yield, ingredients, or procedure instead of inventing them. The screenshot stays in the browser; only the OCR library and English recognition model are lazy-loaded from the major-version-pinned Tesseract.js CDN. If that dependency is blocked, copied-text import and manual entry remain available. The protected Teacher Command Center validates the export and opens it as an unsaved recipe draft. Importing cannot approve, publish, attach, or overwrite a recipe; a teacher must deliberately save and approve the new immutable version.
+The anonymous public application never writes recipes to the workbook. Recipe Studio work remains in browser storage and exports a versioned `gcsd-cottage-recipe-draft` JSON document without a student name, account identifier, or submission record. Its primary intake path sends only a public HTTPS recipe URL to the isolated Recipe Import service. That service validates the address, follows only validated HTTPS redirects, downloads at most two million HTML characters, extracts Schema.org Recipe JSON-LD, returns normalized recipe fields, and caches the public result briefly. It has no spreadsheet, Drive, identity, or write service calls. Copied text and browser-side screenshot OCR feed the same deterministic parser as fallbacks. The protected Teacher Command Center validates the final export and opens it as an unsaved recipe draft. Importing cannot approve, publish, attach, or overwrite a recipe; a teacher must deliberately save and approve the new immutable version.
 
 ## Receipt automation contract
 
