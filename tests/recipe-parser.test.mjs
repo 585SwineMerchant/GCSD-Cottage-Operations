@@ -59,13 +59,13 @@ By NICHOLE
 SERVINGS 2 Cups
 Ingredients
 0 1/2 Cup Butter
-0 1 1/2 Cups Heavy Whipping Cream
+0 3.5 Cups Heavy Whipping Cream
 0 2 Teaspoons Garlic Minced
 0 1/2 Teaspoon Italian Seasoning
 0 1/2 Teaspoon Salt
 0 1/4 Teaspoon Pepper
 0 2 Cups Freshly Grated Parmesan Cheese
-Instructions
+Instructions F Neutrogena advertisement
 (1) Add the butter and cream to a large
 skillet.
 2 Simmer over low heat for 2 minutes.
@@ -73,16 +73,18 @@ skillet.
 salt, and pepper for one minute.
 4 Whisk in the parmesan cheese until
 melted.
-5 Serve immediately.
+9 Serve immediately.
 Nutrition
 Calories: 535kcal`);
   assert.equal(result.name, "Best Homemade Alfredo Sauce");
   assert.equal(result.standardYieldQuantity, 2);
   assert.equal(result.standardYieldUnit, "Cups");
   assert.match(result.ingredientsText, /Butter \| 0\.5 \| cup/);
-  assert.match(result.ingredientsText, /Heavy Whipping Cream \| 1\.5 \| cup/);
+  assert.match(result.ingredientsText, /Heavy Whipping Cream \| 3\.5 \| cup/);
   assert.equal(result.ingredientsText.split("\n").length, 7);
   assert.equal(result.procedureText.split("\n").length, 5);
   assert.match(result.procedureText, /Add the butter and cream to a large skillet\./);
   assert.match(result.procedureText, /Whisk in the parmesan cheese until melted\./);
+  assert.match(result.procedureText, /Serve immediately\./);
+  assert.match(result.warnings.join(" "), /larger than the 2 Cups yield/);
 });
