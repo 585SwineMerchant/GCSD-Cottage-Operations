@@ -52,7 +52,8 @@ const HEADERS = Object.freeze({
 function doGet() {
   assertTeacher_();
   return HtmlService.createHtmlOutputFromFile("Index")
-    .setTitle("GCSD Culinary · Teacher Command Center")
+    .setTitle("The Cottage at Arcadia · Teacher Command Center")
+    .setFaviconUrl("https://585swinemerchant.github.io/GCSD-Cottage-Operations/assets/cottage-favicon.svg")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 

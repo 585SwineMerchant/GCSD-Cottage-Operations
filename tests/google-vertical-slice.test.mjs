@@ -134,6 +134,19 @@ test("GitHub student view is manual-refresh and read-only", async () => {
   assert.doesNotMatch(source, /teacherCommandCenterUrl/);
 });
 
+test("public and teacher interfaces use the Cottage brand and tab identity", async () => {
+  const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
+  const teacherHtml = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  const teacherCode = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
+  assert.match(html, /The Cottage at Arcadia \| Student Operations/);
+  assert.match(html, /assets\/cottage-favicon\.svg/);
+  assert.match(html, /assets\/cottage-logo\.png/);
+  assert.match(teacherHtml, /The Cottage at Arcadia · private operations/);
+  assert.match(teacherHtml, /assets\/cottage-logo\.png/);
+  assert.match(teacherCode, /setTitle\("The Cottage at Arcadia · Teacher Command Center"\)/);
+  assert.match(teacherCode, /setFaviconUrl\("https:\/\/585swinemerchant\.github\.io\/GCSD-Cottage-Operations\/assets\/cottage-favicon\.svg"\)/);
+});
+
 test("publication validation requires the minimum operational event fields", async () => {
   const context = await teacherContext();
   const issues = Array.from(context.publicationIssues_({ event_name: "", client_display_name: "", service_date: "", guest_count: 0, menu_json: "[]", tasks_json: "[]" }));

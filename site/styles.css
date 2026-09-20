@@ -1,14 +1,15 @@
-:root{--green:#123f31;--green2:#286b50;--cream:#f5f0e5;--ink:#1f2924;--muted:#65736c;--line:#d8e0db;--gold:#bd8c2f;--paper:#fff;--danger:#8b352f;--shadow:0 12px 30px rgba(18,63,49,.09)}
+:root{--green:#5b1028;--green2:#83324d;--cream:#f8f3ea;--ink:#2d2326;--muted:#74666b;--line:#e3d9dc;--gold:#c69a45;--paper:#fff;--danger:#9a332d;--shadow:0 12px 30px rgba(91,16,40,.1)}
 
 *{box-sizing:border-box}
-body{margin:0;background:#edf1ee;color:var(--ink);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+body{margin:0;background:#f3efee;color:var(--ink);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
 .skip-link{position:absolute;left:-9999px}
 .skip-link:focus{left:1rem;top:1rem;background:#fff;padding:.7rem;z-index:5}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;background:var(--green);color:#fff;padding:12px clamp(18px,4vw,60px)}
-.brand{display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:14px}
 .brand span:last-child,.brand small,.brand strong{display:block}
 .brand small{text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-size:.65rem}
-.mark{display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(255,255,255,.4);border-radius:50%;font-weight:900}
+.brand strong{font:700 1.15rem Georgia,serif;letter-spacing:.02em}
+.brand-logo{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:12px;border:1px solid rgba(255,255,255,.35);box-shadow:0 4px 14px rgba(0,0,0,.16)}
 .teacher-link{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:.55rem .8rem;font-weight:750}
 main{padding:0 clamp(18px,4vw,60px) 60px}
 .hero{display:flex;justify-content:space-between;align-items:end;gap:30px;background:var(--cream);margin:0 calc(clamp(18px,4vw,60px)*-1);padding:32px clamp(18px,4vw,60px)}
@@ -91,6 +92,7 @@ th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);vertical-
 th{color:var(--green);font-size:.75rem;text-transform:uppercase}
 td small{display:block;color:var(--muted)}
 @media(max-width:760px){.hero,.publication-bar,.event-header,footer{align-items:stretch;flex-direction:column}
+.brand-logo{width:54px;height:54px}
 .brief{grid-template-columns:1fr}
 .event-header strong{text-align:left}
 .task dl,.recipe-grid,.lab-grid,.lab-fields,.cost-row,.research-tools{grid-template-columns:1fr}
