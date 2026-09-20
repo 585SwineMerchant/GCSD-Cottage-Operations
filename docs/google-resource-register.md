@@ -1,6 +1,6 @@
 # Google resource register
 
-Keep this file as a local setup worksheet. Do **not** commit completed IDs, private editing URLs, or account details to GitHub. The two public `/exec` deployment URLs may be entered in `site/config.js` after verification.
+Keep this file as a local setup worksheet. Do **not** commit completed IDs, private editing URLs, the Teacher Command Center URL, or account details to GitHub. Only the Public Feed and Recipe Import `/exec` deployment URLs belong in `site/config.js` after verification.
 
 | Resource | Required name | Record during setup |
 |---|---|---|
