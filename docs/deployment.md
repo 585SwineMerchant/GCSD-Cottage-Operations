@@ -77,10 +77,10 @@ Verify by saving one exact-unit ingredient price, building the test event purcha
 5. Allow GitHub Pages to deploy the updated student timeline from `site/app.js`.
 6. Verify task readiness, a status change to `Revised draft`, generation of a Kitchen Management Plan, and republishing of the student timeline.
 
-## Budget and inventory update
+## Budget update with dormant inventory foundation
 
 1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
 2. Run `initializeWorkbook()` once. It appends `event_budget` and `budget_account_id` to `Events` and creates `BudgetAccounts`, `BudgetTransactions`, `InventoryItems`, and `InventoryTransactions`. Existing rows remain in place.
 3. Create a new version of the existing GCSD-restricted teacher deployment, keeping its URL and permissions unchanged.
 4. Do not update the public-feed deployment. Budget, inventory, supplier, and purchasing data remain outside its allowlisted payload.
-5. Verify one funding account, one commitment and expense, an inventory receipt and usage movement, an event budget comparison, and a received purchase creating exactly one inventory receipt.
+5. Verify one funding account, one commitment and expense, and an event budget comparison. Inventory controls are intentionally hidden and inventory records do not affect purchasing while the feature flag is off.

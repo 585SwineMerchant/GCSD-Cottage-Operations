@@ -579,13 +579,11 @@ test("private event budget changes do not revise the student publication", async
   assert.equal(JSON.stringify(publicEvent).includes(account.budget_account_id), false);
 });
 
-test("inventory movements drive purchasing and received purchases create one auditable receipt", async () => {
+test("inventory remains dormant and does not add teacher admin work", async () => {
   const fake = fakeAppsScript();
   const context = await teacherContext(fake.globals);
   context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
-  const item = context.saveInventoryItem({ ingredient_name: "Tomatoes", inventory_unit: "oz", opening_quantity: 16, reorder_level: 8, storage_location: "Walk-in" });
-  context.recordInventoryTransaction({ inventory_item_id: item.inventory_item_id, transaction_type: "Receipt", quantity: 4, vendor: "Wegmans" });
-  context.recordInventoryTransaction({ inventory_item_id: item.inventory_item_id, event_id: "evt-stock", transaction_type: "Usage", quantity: 5 });
+  assert.throws(() => context.saveInventoryItem({ ingredient_name: "Tomatoes", inventory_unit: "oz", opening_quantity: 16 }), /not active/);
   const draft = context.saveRecipe({ name: "Tomato Test", standard_yield_quantity: 8, standard_yield_unit: "portions", ingredients: [{ name: "Tomatoes", quantity: 20, unit: "oz" }], procedure: ["Prepare"] });
   const approved = context.approveRecipe(draft.recipe_id, "Approved");
   context.appendRecord_("Events", operationalEvent({ event_id: "evt-stock", guest_count: 12, menu_json: JSON.stringify([{ name: "Tomato Test", required: 12 }]), tasks_json: JSON.stringify([{ name: "Tomato Test" }]), event_budget: 100 }));
@@ -593,25 +591,25 @@ test("inventory movements drive purchasing and received purchases create one aud
   context.saveIngredientPrice({ ingredient_name: "Tomatoes", recipe_unit: "oz", package_description: "32 oz package", package_quantity: 32, package_price: 4.99, supplier: "Wegmans" });
   const costing = context.generateEventPurchasePlan("evt-stock");
   const tomatoes = costing.items.find(row => row.ingredient_name === "Tomatoes");
-  assert.equal(tomatoes.on_hand_quantity, 15);
-  assert.equal(tomatoes.to_purchase_quantity, 15);
+  assert.equal(tomatoes.on_hand_quantity, 0);
+  assert.equal(tomatoes.to_purchase_quantity, 30);
   assert.equal(tomatoes.packages_needed, 1);
   assert.equal(costing.estimatedFoodCost, 4.68);
   assert.equal(costing.costPerGuest, 0.39);
   assert.equal(costing.budgetVariance, 95.01);
-  context.updateEventPurchaseItem(tomatoes.purchase_item_id, { on_hand_quantity: 15, status: "Received", notes: "Received in full" });
-  context.updateEventPurchaseItem(tomatoes.purchase_item_id, { on_hand_quantity: 15, status: "Received", notes: "Receipt remains idempotent" });
+  context.updateEventPurchaseItem(tomatoes.purchase_item_id, { on_hand_quantity: 0, status: "Received", notes: "Received in full" });
   const finance = context.financeDashboard_();
-  assert.equal(finance.inventory.find(row => row.ingredient_name === "Tomatoes").quantityOnHand, 47);
-  assert.equal(context.records_("InventoryTransactions").filter(row => row.source_id === tomatoes.purchase_item_id).length, 1);
+  assert.deepEqual(Array.from(finance.inventory), []);
+  assert.equal(context.records_("InventoryTransactions").length, 0);
 });
 
-test("budget and inventory teacher controls are present and remain absent from the student app", async () => {
+test("budget controls are visible, inventory controls are dormant, and private data remains absent from the student app", async () => {
   const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
   const student = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
-  assert.match(teacher, /Budget &amp; inventory/);
+  assert.match(teacher, />Budget</);
+  assert.match(teacher, /Budget management/);
   assert.match(teacher, /saveBudgetAccount/);
-  assert.match(teacher, /saveInventoryMovement/);
+  assert.match(teacher, /data-inactive-feature="inventory" hidden/);
   assert.match(teacher, /Received/);
   assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price/);
 });

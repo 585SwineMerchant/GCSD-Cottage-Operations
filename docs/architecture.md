@@ -86,13 +86,13 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, and inventory ledger are complete in source. Later phases will add operational closeout and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, and budget ledger are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Later phases will add operational closeout and Recipe Studio export/import.
 
 ## Budget and inventory contract
 
 Budget accounts distinguish allocated, committed, spent, credited, and available balances across payment methods. Commitments count only while `Active` and may be explicitly marked `Fulfilled` or `Released`; every status change is audited. Posted expenses increase spent funds and posted credits reduce them. Event budget targets and account assignments are private and do not create a revised student draft by themselves.
 
-Inventory quantity is reconstructed from each item's opening quantity plus its append-only movement history. Receipts add stock; usage and waste subtract stock; adjustments may add or subtract. Exact ingredient-name and unit matching allows an event purchase plan to use current stock before calculating packages to buy. Marking a purchase `Received` creates one source-linked receipt and cannot duplicate that receipt if saved again.
+When the inventory feature is enabled in a future release, quantity is reconstructed from each item's opening quantity plus its append-only movement history. Receipts add stock; usage and waste subtract stock; adjustments may add or subtract. While disabled, inventory records do not affect event purchase calculations and a `Received` purchase does not create an inventory movement.
 
 ## Production planning contract
 

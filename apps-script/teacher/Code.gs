@@ -20,6 +20,11 @@ const SHEETS = Object.freeze({
 const REQUEST_REVIEW_STATUSES = Object.freeze(["New", "Under Review", "Needs Information", "Declined"]);
 const EVENT_LIFECYCLE_STATUSES = Object.freeze(["Planning", "Ready", "Completed"]);
 const PUBLICATION_STATUSES = Object.freeze(["Never published", "Published", "Revised draft", "Unpublished"]);
+const FEATURES = Object.freeze({
+  // Keep the completed inventory foundation dormant until its workflow can be
+  // automated enough to avoid creating routine data-entry work for teachers.
+  INVENTORY: false
+});
 
 const HEADERS = Object.freeze({
   Requests: ["request_id", "submitted_at", "requester", "contact_name", "contact_email", "contact_phone", "event_name", "event_type", "school", "service_date", "service_time", "guest_count", "service_format", "requested_menu", "requirements", "allergens", "internal_notes", "status", "event_id", "updated_at"],
@@ -517,6 +522,7 @@ function updateBudgetTransactionStatus(budgetTransactionId, status) {
 
 function saveInventoryItem(input) {
   const teacher = assertTeacher_();
+  if (!FEATURES.INVENTORY) throw new Error("Inventory management is not active.");
   if (!input) throw new Error("Inventory item data is required.");
   return withLock_(() => {
     const name = clean_(input.ingredient_name, 300), unit = clean_(input.inventory_unit, 100);
@@ -541,6 +547,7 @@ function saveInventoryItem(input) {
 
 function recordInventoryTransaction(input) {
   const teacher = assertTeacher_();
+  if (!FEATURES.INVENTORY) throw new Error("Inventory management is not active.");
   if (!input) throw new Error("Inventory transaction data is required.");
   const item = findRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", input.inventory_item_id);
   if (!item || String(item.active || "TRUE").toUpperCase() === "FALSE") throw new Error("Choose an active inventory item.");
@@ -558,6 +565,7 @@ function recordInventoryTransaction(input) {
 
 function archiveInventoryItem(inventoryItemId) {
   const teacher = assertTeacher_();
+  if (!FEATURES.INVENTORY) throw new Error("Inventory management is not active.");
   return withLock_(() => {
     const item = findRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", inventoryItemId);
     if (!item) throw new Error("Inventory item not found.");
@@ -576,7 +584,7 @@ function generateEventPurchasePlan(eventId) {
     const requirements = ingredientRequirements_(eventId);
     if (!requirements.length) throw new Error("Attach at least one approved recipe before building a purchase plan.");
     const prices = activeIngredientPrices_();
-    const inventory = inventoryQuantityByKey_();
+    const inventory = FEATURES.INVENTORY ? inventoryQuantityByKey_() : {};
     const existing = records_(SHEETS.EVENT_PURCHASES).filter(item => String(item.event_id) === String(eventId));
     const now = new Date().toISOString();
     const activeIds = [];
@@ -641,7 +649,7 @@ function updateEventPurchaseItem(purchaseItemId, input) {
       notes: clean_(input && input.notes, 1000), updated_at: new Date().toISOString(), updated_by: teacher.email
     };
     updateRecord_(SHEETS.EVENT_PURCHASES, "purchase_item_id", purchaseItemId, patch);
-    if (status === "Received" && !records_(SHEETS.INVENTORY_TRANSACTIONS).some(transaction => String(transaction.source_id) === String(purchaseItemId) && transaction.transaction_type === "Receipt")) {
+    if (FEATURES.INVENTORY && status === "Received" && !records_(SHEETS.INVENTORY_TRANSACTIONS).some(transaction => String(transaction.source_id) === String(purchaseItemId) && transaction.transaction_type === "Receipt")) {
       const quantityReceived = roundQuantity_(positiveOrZero_(patch.packages_needed) * positiveOrZero_(item.package_quantity));
       if (quantityReceived > 0) {
         const inventoryItem = ensureInventoryItem_(item.ingredient_name, item.recipe_unit, teacher.email);
@@ -1334,8 +1342,8 @@ function financeDashboard_() {
     const allocated = roundMoney_(positiveOrZero_(account.allocated_amount));
     return Object.assign({}, account, { allocated, committed, spent, available: roundMoney_(allocated - committed - spent) });
   });
-  const inventoryTransactions = records_(SHEETS.INVENTORY_TRANSACTIONS).sort((a, b) => String(b.transaction_date || b.created_at).localeCompare(String(a.transaction_date || a.created_at)));
-  const inventory = activeInventoryItems_().map(item => {
+  const inventoryTransactions = FEATURES.INVENTORY ? records_(SHEETS.INVENTORY_TRANSACTIONS).sort((a, b) => String(b.transaction_date || b.created_at).localeCompare(String(a.transaction_date || a.created_at))) : [];
+  const inventory = (FEATURES.INVENTORY ? activeInventoryItems_() : []).map(item => {
     const movements = inventoryTransactions.filter(transaction => String(transaction.inventory_item_id) === String(item.inventory_item_id));
     const quantityOnHand = roundQuantity_(positiveOrZero_(item.opening_quantity) + movements.reduce((sum, transaction) => sum + Number(transaction.quantity || 0), 0));
     const reorderLevel = positiveOrZero_(item.reorder_level);
