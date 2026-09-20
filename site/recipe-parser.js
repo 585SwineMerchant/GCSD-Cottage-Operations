@@ -31,7 +31,13 @@
 
   function headingFor(line) {
     const candidate = cleanLine(line).replace(/[:\-–—]+$/, "");
-    return Object.keys(headings).find(key => headings[key].test(candidate)) || "";
+    const exact = Object.keys(headings).find(key => headings[key].test(candidate));
+    if (exact) return exact;
+    if (/^(?:ingredients?|what you(?:'|’)ll need)\b/i.test(candidate)) return "ingredients";
+    if (/^(?:directions?|instructions?|method|preparation|steps?)\b/i.test(candidate)) return "procedure";
+    if (/^(?:equipment|tools?|supplies)\b/i.test(candidate)) return "equipment";
+    if (/^(?:allergens?|allergy information)\b/i.test(candidate)) return "allergens";
+    return "";
   }
 
   function withoutOcrCheckbox(value) {
@@ -89,6 +95,11 @@
     return cleanLine(line).replace(/^(?:step\s*)?(?:[([]?\d{1,2}[\])}.:]?|[①-⑳]|[©@])\s*/i, "");
   }
 
+  function looksLikeProcedure(line) {
+    const candidate = stripProcedureMarker(line);
+    return hasProcedureMarker(line) && /^(?:add|simmer|whisk|mix|stir|combine|heat|cook|bake|roast|place|season|serve|chill|refrigerate|preheat|bring|reduce|remove|fold|knead|rest|pour|cut|slice|blend)\b/i.test(candidate);
+  }
+
   function procedureLines(lines) {
     if (!lines.some(hasProcedureMarker)) return lines.map(stripProcedureMarker).filter(Boolean);
     const steps = [];
@@ -111,6 +122,7 @@
     lines.forEach(line => {
       const heading = headingFor(line);
       if (heading) { current = heading; sawHeading = true; return; }
+      if (current === "ingredients" && sections.ingredients.length && looksLikeProcedure(line)) current = "procedure";
       if (/^(?:notes?|nutrition(?: facts)?|reviews?|related recipes?|storage|tips?)\s*:?$/i.test(line)) { current = ""; return; }
       const isRecipeMeta = /^(?:yield|servings?|makes|prep time|cook time|total time)\b/i.test(line) || /^serves?\s*:?\s*\d+/i.test(line);
       if (current && !/^https?:\/\//i.test(line) && !isRecipeMeta) sections[current].push(line);
@@ -132,6 +144,10 @@
     if (!yieldMatch) warnings.push("Yield was not detected.");
     if (!ingredients.length) warnings.push("No structured ingredient quantities were detected.");
     if (!procedures.length) warnings.push("Procedure steps were not detected.");
+    if (yieldMatch) {
+      const yieldQuantity = Number(yieldMatch[1]), yieldUnit = (unitAliases[cleanLine(yieldMatch[2] || "").toLowerCase()] || cleanLine(yieldMatch[2] || "").toLowerCase()).replace(/s$/, "");
+      ingredients.filter(item => item.quantity && item.unit && item.unit.replace(/s$/, "") === yieldUnit && item.quantity > yieldQuantity * 1.25).forEach(item => warnings.push(`${item.name} was read as ${item.quantity} ${item.unit}, which is larger than the ${yieldQuantity} ${cleanLine(yieldMatch[2])} yield. Check this quantity against the original.`));
+    }
     return {
       name: title,
       standardYieldQuantity: yieldMatch ? Number(yieldMatch[1]) : 0,
