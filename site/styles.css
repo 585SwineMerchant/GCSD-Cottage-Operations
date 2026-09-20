@@ -64,6 +64,8 @@ footer span{opacity:.72}
 .lab-panel h2{margin:.1rem 0 1rem;color:var(--green);font:700 1.5rem Georgia,serif}
 .lab-panel label{display:block;font-size:.78rem;font-weight:800;color:#405047;margin:10px 0}
 .lab-panel input,.lab-panel select{display:block;width:100%;margin-top:5px;border:1px solid #bdc9c2;border-radius:7px;padding:.7rem;background:#fff;font:inherit}
+.lab-panel textarea{display:block;width:100%;margin-top:5px;border:1px solid #bdc9c2;border-radius:7px;padding:.7rem;background:#fff;font:inherit;resize:vertical}
+.actions{display:flex;gap:9px;flex-wrap:wrap}
 .lab-fields,.cost-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
 .cost-row{border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
 .cost-row .wide{grid-column:1/-1}
