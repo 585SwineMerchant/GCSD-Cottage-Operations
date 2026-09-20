@@ -37,7 +37,7 @@ configureVerticalSlice({
 });
 ```
 
-This creates and validates these tabs:
+This creates and validates the managed workbook tabs, including requests, events, recipes, costing, budget, receipts, closeout, and the dormant inventory foundation.
 
 - `Requests`
 - `Events`
@@ -102,11 +102,13 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, request queue, event workspaces, publication controls, document and audit history, the versioned Recipe Library, private event costing and purchasing, the full production planner, private budget management, and operational closeout. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, funding accounts, transaction ledgers, supplier details, closeout actuals, and immutable cost snapshots remain teacher-only. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation; receipt capture and Recipe Studio import remain later version-two stages.
+The protected application now includes the operations dashboard, request queue, guided event workflow, structured menu/task editors, publication controls, document and audit history, the versioned Recipe Library, private event costing and purchasing, the full production planner, private budget management, receipt-photo review, and operational closeout. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, funding accounts, transaction ledgers, receipts, supplier details, closeout actuals, and immutable cost snapshots remain teacher-only. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation; Recipe Studio import remains a later version-two stage.
+
+The receipt release adds `Receipts` and uses Google Drive OCR. In the teacher Apps Script project, add the **Drive API** under **Services** (identifier `Drive`, version `v3`), or copy the repository's `appsscript.json` manifest. Receipt capture still saves a private review draft if OCR is unavailable, but automated extraction requires the service.
 
 The production-planner release does not add workbook tabs or columns. Replace `teacher/Code.gs` and `teacher/Index.html`, then create a new version of the existing protected teacher deployment. Do not rerun `initializeWorkbook()` solely for this release.
 
-The closeout release adds `EventCloseouts`. After replacing the teacher source, run `initializeWorkbook()` once before creating the new deployment version.
+The closeout release adds `EventCloseouts`. The streamlined receipt release adds `Receipts`. After replacing the teacher source, run `initializeWorkbook()` once before creating the new deployment version.
 
 The budget release added `BudgetAccounts`, `BudgetTransactions`, `InventoryItems`, and `InventoryTransactions`, plus append-only `event_budget` and `budget_account_id` columns on `Events`.
 

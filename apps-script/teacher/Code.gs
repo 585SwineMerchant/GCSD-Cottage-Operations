@@ -13,6 +13,7 @@ const SHEETS = Object.freeze({
   COST_SNAPSHOTS: "CostSnapshots",
   BUDGET_ACCOUNTS: "BudgetAccounts",
   BUDGET_TRANSACTIONS: "BudgetTransactions",
+  RECEIPTS: "Receipts",
   EVENT_CLOSEOUTS: "EventCloseouts",
   INVENTORY_ITEMS: "InventoryItems",
   INVENTORY_TRANSACTIONS: "InventoryTransactions"
@@ -42,6 +43,7 @@ const HEADERS = Object.freeze({
   CostSnapshots: ["cost_snapshot_id", "event_id", "created_at", "created_by", "estimated_total", "unpriced_count", "snapshot_json"],
   BudgetAccounts: ["budget_account_id", "name", "school", "course", "funding_source", "payment_method", "allocated_amount", "notes", "active", "updated_at", "updated_by"],
   BudgetTransactions: ["budget_transaction_id", "budget_account_id", "event_id", "transaction_type", "amount", "vendor", "category", "reference", "transaction_date", "status", "notes", "created_at", "created_by"],
+  Receipts: ["receipt_id", "file_id", "file_url", "file_name", "mime_type", "ocr_status", "ocr_text", "vendor", "transaction_date", "total_amount", "reference", "category", "event_id", "budget_account_id", "commitment_id", "notes", "status", "budget_transaction_id", "created_at", "created_by", "updated_at", "updated_by"],
   EventCloseouts: ["closeout_id", "event_id", "completed_on", "outcome", "actual_guest_count", "actual_cost", "actual_cost_source", "customer_feedback", "successes", "issues", "follow_up", "finalized_at", "finalized_by", "created_at", "created_by", "updated_at", "updated_by"],
   InventoryItems: ["inventory_item_id", "ingredient_name", "inventory_unit", "opening_quantity", "reorder_level", "storage_location", "notes", "active", "updated_at", "updated_by"],
   InventoryTransactions: ["inventory_transaction_id", "inventory_item_id", "event_id", "transaction_type", "quantity", "unit_cost", "vendor", "source_id", "transaction_date", "notes", "created_at", "created_by"]
@@ -215,17 +217,24 @@ function getEventWorkspace(eventId) {
     .filter(item => String(item.event_id) === String(eventId))
     .sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))
     .map(({ snapshot_json, ...item }) => item);
+  const enrichedEvent = enrichEvent_(event);
+  const costing = eventCosting_(eventId);
+  const productionPlan = analyzeProductionPlan_(event);
+  const closeout = eventCloseout_(eventId);
+  const documents = records_(SHEETS.DOCUMENTS).filter(item => String(item.event_id) === String(eventId));
+  const eventRecipes = eventRecipeRecords_(eventId).map(enrichEventRecipe_);
   return {
-    event: enrichEvent_(event),
+    event: enrichedEvent,
     sourceRequest: event.request_id ? findRecord_(SHEETS.REQUESTS, "request_id", event.request_id) : null,
-    documents: records_(SHEETS.DOCUMENTS).filter(item => String(item.event_id) === String(eventId)),
-    eventRecipes: eventRecipeRecords_(eventId).map(enrichEventRecipe_),
+    documents,
+    eventRecipes,
     approvedRecipes: recipeSummaries_().filter(item => item.status === "Approved"),
     ingredientPrices: activeIngredientPrices_(),
     budgetAccounts: activeBudgetAccounts_(),
-    costing: eventCosting_(eventId),
-    productionPlan: analyzeProductionPlan_(event),
-    closeout: eventCloseout_(eventId),
+    costing,
+    productionPlan,
+    closeout,
+    workflow: eventWorkflow_(enrichedEvent, { costing, productionPlan, closeout, documents, eventRecipes }),
     publications,
     audit: records_(SHEETS.AUDIT)
       .filter(item => String(item.record_id) === String(eventId) || String(parseJson_(item.detail_json, {}).eventId || "") === String(eventId))
@@ -521,6 +530,249 @@ function updateBudgetTransactionStatus(budgetTransactionId, status) {
     audit_(teacher.email, "update_budget_transaction_status", "budget_transaction", budgetTransactionId, { previousStatus: transaction.status, status: nextStatus });
     return findRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", budgetTransactionId);
   });
+}
+
+/**
+ * Creates or refreshes one private budget commitment from the current event
+ * purchase estimate. This avoids re-keying the event, account, and amount.
+ */
+function createPurchaseCommitment(eventId) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    const account = findRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", event.budget_account_id);
+    if (!account || String(account.active || "TRUE").toUpperCase() === "FALSE") {
+      throw new Error("Choose and save an active funding account on the event first.");
+    }
+    const costing = eventCosting_(eventId);
+    if (!positiveNumber_(costing.estimatedTotal, 0)) throw new Error("Build a priced purchase plan before creating a commitment.");
+    const existing = records_(SHEETS.BUDGET_TRANSACTIONS).find(item =>
+      item.transaction_type === "Commitment" && item.status === "Active" &&
+      String(item.event_id) === String(eventId) && item.reference === "AUTO-PURCHASE-PLAN"
+    );
+    const now = new Date().toISOString();
+    if (existing) {
+      updateRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", existing.budget_transaction_id, {
+        budget_account_id: account.budget_account_id,
+        amount: roundMoney_(costing.estimatedTotal),
+        vendor: purchasePlanVendor_(costing.items),
+        transaction_date: now.slice(0, 10),
+        notes: `Current purchase-plan estimate for ${event.event_name}`
+      });
+      audit_(teacher.email, "refresh_purchase_commitment", "budget_transaction", existing.budget_transaction_id, { eventId, amount: costing.estimatedTotal });
+      return findRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", existing.budget_transaction_id);
+    }
+    const record = {
+      budget_transaction_id: id_("budgettx"), budget_account_id: account.budget_account_id,
+      event_id: eventId, transaction_type: "Commitment", amount: roundMoney_(costing.estimatedTotal),
+      vendor: purchasePlanVendor_(costing.items), category: "Event purchasing", reference: "AUTO-PURCHASE-PLAN",
+      transaction_date: now.slice(0, 10), status: "Active",
+      notes: `Purchase-plan estimate for ${event.event_name}`, created_at: now, created_by: teacher.email
+    };
+    appendRecord_(SHEETS.BUDGET_TRANSACTIONS, record);
+    audit_(teacher.email, "create_purchase_commitment", "budget_transaction", record.budget_transaction_id, { eventId, amount: record.amount });
+    return record;
+  });
+}
+
+function purchasePlanVendor_(items) {
+  const vendors = [...new Set((items || []).map(item => clean_(item.supplier, 200)).filter(Boolean))];
+  return vendors.length === 1 ? vendors[0] : vendors.length > 1 ? "Multiple suppliers" : "";
+}
+
+/**
+ * Saves a receipt image/PDF inside the private project folder and creates a
+ * reviewable draft. OCR is advisory only and never creates an expense.
+ */
+function captureReceipt(input) {
+  const teacher = assertTeacher_();
+  if (!input) throw new Error("Choose a receipt image or PDF.");
+  const mimeType = clean_(input.mime_type, 100).toLowerCase();
+  const allowed = ["image/jpeg", "image/png", "image/gif", "image/bmp", "application/pdf"];
+  if (!allowed.includes(mimeType)) throw new Error("Receipt must be a JPEG, PNG, GIF, BMP, or PDF.");
+  const raw = String(input.base64 || "").replace(/^data:[^;]+;base64,/, "");
+  if (!raw) throw new Error("Receipt file data is missing.");
+  const bytes = Utilities.base64Decode(raw);
+  if (bytes.length > 5 * 1024 * 1024) throw new Error("Receipt files are limited to 5 MB.");
+  const now = new Date().toISOString();
+  const fileName = safeFileName_(input.file_name || `receipt-${now.slice(0, 10)}`);
+  const blob = Utilities.newBlob(bytes, mimeType, fileName);
+  const folder = receiptFolder_();
+  const file = folder.createFile(blob);
+  let ocrText = "", ocrStatus = "Completed", ocrMessage = "";
+  try {
+    ocrText = receiptOcrText_(blob);
+    if (!ocrText.trim()) {
+      ocrStatus = "Needs review";
+      ocrMessage = "Google OCR returned no text; enter the receipt details manually.";
+    }
+  } catch (error) {
+    ocrStatus = "Unavailable";
+    ocrMessage = "OCR is not enabled yet; the original receipt was saved and can be entered manually.";
+  }
+  const parsed = parseReceiptText_(ocrText);
+  const record = {
+    receipt_id: id_("receipt"), file_id: file.getId(), file_url: file.getUrl(), file_name: fileName,
+    mime_type: mimeType, ocr_status: ocrStatus, ocr_text: clean_(ocrText, 50000),
+    vendor: parsed.vendor, transaction_date: parsed.transactionDate,
+    total_amount: parsed.totalAmount || "", reference: parsed.reference, category: "Food",
+    event_id: clean_(input.event_id, 100), budget_account_id: clean_(input.budget_account_id, 100),
+    commitment_id: clean_(input.commitment_id, 100), notes: clean_(input.notes, 1000), status: "Draft",
+    budget_transaction_id: "", created_at: now, created_by: teacher.email, updated_at: now, updated_by: teacher.email
+  };
+  appendRecord_(SHEETS.RECEIPTS, record);
+  audit_(teacher.email, "capture_receipt", "receipt", record.receipt_id, { fileId: record.file_id, ocrStatus, eventId: record.event_id });
+  return Object.assign({}, receiptView_(record), { ocrMessage, extractionWarnings: parsed.warnings });
+}
+
+function saveReceiptDraft(input) {
+  const teacher = assertTeacher_();
+  if (!input || !input.receipt_id) throw new Error("Receipt draft is required.");
+  return withLock_(() => {
+    const receipt = findRecord_(SHEETS.RECEIPTS, "receipt_id", input.receipt_id);
+    if (!receipt) throw new Error("Receipt draft not found.");
+    if (receipt.status !== "Draft") throw new Error("Only receipt drafts can be edited.");
+    const amount = input.total_amount === "" ? "" : roundMoney_(positiveNumber_(input.total_amount, 0));
+    if (input.total_amount !== "" && !amount) throw new Error("Receipt total must be greater than zero.");
+    const patch = {
+      vendor: clean_(input.vendor, 200), transaction_date: clean_(input.transaction_date, 20), total_amount: amount,
+      reference: clean_(input.reference, 200), category: clean_(input.category, 100),
+      event_id: clean_(input.event_id, 100), budget_account_id: clean_(input.budget_account_id, 100),
+      commitment_id: clean_(input.commitment_id, 100), notes: clean_(input.notes, 1000),
+      updated_at: new Date().toISOString(), updated_by: teacher.email
+    };
+    updateRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id, patch);
+    audit_(teacher.email, "save_receipt_draft", "receipt", receipt.receipt_id, { eventId: patch.event_id, amount: patch.total_amount });
+    return receiptView_(findRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id));
+  });
+}
+
+/** Posts one reviewed receipt as an expense and optionally fulfills its commitment. */
+function postReceiptExpense(input) {
+  const teacher = assertTeacher_();
+  if (!input || !input.receipt_id) throw new Error("Receipt draft is required.");
+  return withLock_(() => {
+    const receipt = findRecord_(SHEETS.RECEIPTS, "receipt_id", input.receipt_id);
+    if (!receipt) throw new Error("Receipt draft not found.");
+    if (receipt.status !== "Draft") throw new Error("This receipt has already been processed.");
+    const accountId = clean_(input.budget_account_id || receipt.budget_account_id, 100);
+    const account = findRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", accountId);
+    if (!account || String(account.active || "TRUE").toUpperCase() === "FALSE") throw new Error("Choose an active funding account.");
+    const amount = roundMoney_(positiveNumber_(input.total_amount || receipt.total_amount, 0));
+    if (!amount) throw new Error("Confirm a receipt total greater than zero.");
+    const eventId = clean_(input.event_id || receipt.event_id, 100);
+    if (eventId && !findRecord_(SHEETS.EVENTS, "event_id", eventId)) throw new Error("The selected event was not found.");
+    const commitmentId = clean_(input.commitment_id || receipt.commitment_id, 100);
+    const commitment = commitmentId ? findRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", commitmentId) : null;
+    if (commitmentId && (!commitment || commitment.transaction_type !== "Commitment" || commitment.status !== "Active")) throw new Error("Choose an active commitment or leave it blank.");
+    if (commitment && String(commitment.budget_account_id) !== String(accountId)) throw new Error("The commitment and receipt must use the same funding account.");
+    if (commitment && commitment.event_id && eventId && String(commitment.event_id) !== String(eventId)) throw new Error("The commitment belongs to a different event.");
+    const now = new Date().toISOString();
+    const transactionId = `expense_${receipt.receipt_id}`;
+    const existingExpense = findRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", transactionId);
+    const transaction = existingExpense || {
+      budget_transaction_id: transactionId, budget_account_id: accountId, event_id: eventId,
+      transaction_type: "Expense", amount, vendor: clean_(input.vendor || receipt.vendor, 200),
+      category: clean_(input.category || receipt.category || "Food", 100),
+      reference: clean_(input.reference || receipt.reference || `Receipt ${receipt.receipt_id}`, 200),
+      transaction_date: clean_(input.transaction_date || receipt.transaction_date, 20) || now.slice(0, 10),
+      status: "Posted", notes: clean_(input.notes || receipt.notes, 1000), created_at: now, created_by: teacher.email
+    };
+    if (!existingExpense) appendRecord_(SHEETS.BUDGET_TRANSACTIONS, transaction);
+    if (commitment) updateRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", commitmentId, { status: "Fulfilled" });
+    updateRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id, {
+      vendor: transaction.vendor, transaction_date: transaction.transaction_date, total_amount: amount,
+      reference: transaction.reference, category: transaction.category, event_id: eventId,
+      budget_account_id: accountId, commitment_id: commitmentId, notes: transaction.notes,
+      status: "Posted", budget_transaction_id: transaction.budget_transaction_id, updated_at: now, updated_by: teacher.email
+    });
+    audit_(teacher.email, "post_receipt_expense", "receipt", receipt.receipt_id, { transactionId: transaction.budget_transaction_id, commitmentId, eventId, amount });
+    return { receipt: receiptView_(findRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id)), transaction };
+  });
+}
+
+function ignoreReceipt(receiptId, reason) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const receipt = findRecord_(SHEETS.RECEIPTS, "receipt_id", receiptId);
+    if (!receipt || receipt.status !== "Draft") throw new Error("Active receipt draft not found.");
+    const note = clean_(reason, 1000);
+    if (!note) throw new Error("A reason is required.");
+    updateRecord_(SHEETS.RECEIPTS, "receipt_id", receiptId, { status: "Ignored", notes: note, updated_at: new Date().toISOString(), updated_by: teacher.email });
+    audit_(teacher.email, "ignore_receipt", "receipt", receiptId, { reason: note });
+    return { ok: true };
+  });
+}
+
+function receiptFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const existingId = props.getProperty("RECEIPT_FOLDER_ID");
+  if (existingId) {
+    try { return DriveApp.getFolderById(existingId); } catch (_) { /* recreate below */ }
+  }
+  const root = DriveApp.getFolderById(props.getProperty("DOCUMENT_FOLDER_ID"));
+  const matches = root.getFoldersByName("Receipts");
+  const folder = matches.hasNext() ? matches.next() : root.createFolder("Receipts");
+  props.setProperty("RECEIPT_FOLDER_ID", folder.getId());
+  return folder;
+}
+
+function receiptOcrText_(blob) {
+  if (typeof Drive === "undefined" || !Drive.Files) throw new Error("Advanced Drive service is not enabled.");
+  const converted = Drive.Files.create({
+    name: `OCR - ${blob.getName()}`,
+    mimeType: "application/vnd.google-apps.document"
+  }, blob, { ocrLanguage: "en", fields: "id" });
+  try {
+    return DocumentApp.openById(converted.id).getBody().getText();
+  } finally {
+    try { DriveApp.getFileById(converted.id).setTrashed(true); } catch (_) { /* temporary OCR document expires manually */ }
+  }
+}
+
+function parseReceiptText_(text) {
+  const lines = String(text || "").split(/\r?\n/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const warnings = [];
+  const datePatterns = [
+    /\b(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/,
+    /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](20\d{2}|\d{2})\b/
+  ];
+  let transactionDate = "";
+  for (const line of lines) {
+    let match = line.match(datePatterns[0]);
+    if (match) { transactionDate = `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`; break; }
+    match = line.match(datePatterns[1]);
+    if (match) {
+      const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+      transactionDate = `${year}-${String(match[1]).padStart(2, "0")}-${String(match[2]).padStart(2, "0")}`;
+      break;
+    }
+  }
+  const moneyValues = line => [...line.matchAll(/(?:\$\s*)?(\d{1,6}(?:,\d{3})*\.\d{2})\b/g)].map(match => Number(match[1].replace(/,/g, "")));
+  const totalLines = lines.filter(line => /\b(grand\s+total|amount\s+due|balance\s+due|total)\b/i.test(line) && !/\b(subtotal|taxable|total\s+savings)\b/i.test(line));
+  let totalAmount = 0;
+  for (const line of totalLines.reverse()) {
+    const values = moneyValues(line);
+    if (values.length) { totalAmount = values[values.length - 1]; break; }
+  }
+  if (!totalAmount) warnings.push("Total was not confidently detected.");
+  if (!transactionDate) warnings.push("Transaction date was not confidently detected.");
+  const vendor = clean_(lines.find(line => /[a-z]/i.test(line) && !/^(receipt|invoice|order|date|time|tel|phone|www\.|https?:|thank you)/i.test(line) && !/^\d+[\s-]/.test(line)) || "", 200);
+  if (!vendor) warnings.push("Vendor was not confidently detected.");
+  const referenceLine = lines.find(line => /\b(receipt|invoice|order|transaction)\s*(#|no\.?|number|id|:)\s*[a-z0-9-]+/i.test(line)) || "";
+  const referenceMatch = referenceLine.match(/\b(?:receipt|invoice|order|transaction)\s*(?:#|no\.?|number|id|:)\s*([a-z0-9-]+)/i);
+  return { vendor, transactionDate, totalAmount: totalAmount ? roundMoney_(totalAmount) : 0, reference: referenceMatch ? referenceMatch[1] : "", warnings };
+}
+
+function receiptView_(receipt) {
+  if (!receipt) return null;
+  const { ocr_text, ...safe } = receipt;
+  return Object.assign({}, safe, { total_amount: receipt.total_amount === "" ? "" : positiveOrZero_(receipt.total_amount) });
+}
+
+function safeFileName_(value) {
+  return clean_(value, 180).replace(/[\\/:*?"<>|]+/g, "-") || "receipt";
 }
 
 function saveInventoryItem(input) {
@@ -1416,6 +1668,28 @@ function eventCloseout_(eventId) {
   });
 }
 
+function eventWorkflow_(event, context) {
+  const menu = parseJson_(event.menu_json, []);
+  const tasks = normalizeTasks_(parseJson_(event.tasks_json, []));
+  const attachedNames = new Set((context.eventRecipes || []).map(item => String(item.menu_item_name).toLowerCase()));
+  const menuMissingRecipes = menu.filter(item => !attachedNames.has(String(item.name).toLowerCase())).length;
+  const purchaseReady = Boolean(context.costing.latestSnapshot) && context.costing.unpricedCount === 0;
+  const documentTypes = new Set((context.documents || []).map(item => item.document_type));
+  const finalized = Boolean(context.closeout && context.closeout.finalized_at);
+  const steps = [
+    { id: "details", label: "Confirm event details", complete: Boolean(event.event_name && event.service_date && positiveInteger_(event.guest_count, 0)), section: "overview" },
+    { id: "menu", label: "Build menu", complete: menu.length > 0, section: "production" },
+    { id: "recipes", label: "Attach approved recipes", complete: menu.length > 0 && menuMissingRecipes === 0, section: "production", optional: true },
+    { id: "purchasing", label: "Price purchase plan", complete: purchaseReady, section: "costing" },
+    { id: "production", label: "Ready production plan", complete: tasks.length > 0 && context.productionPlan.ready, section: "production" },
+    { id: "documents", label: "Generate kitchen plan", complete: documentTypes.has("Kitchen Management Plan"), section: "documents", optional: true },
+    { id: "publication", label: event.publication_status === "Published" ? "Student plan published" : "Publish student plan", complete: event.publication_status === "Published", section: "publication" },
+    { id: "closeout", label: "Complete event closeout", complete: finalized, section: "closeout" }
+  ];
+  const next = steps.find(step => !step.complete && !step.optional) || steps.find(step => !step.complete) || null;
+  return { steps, next, completeCount: steps.filter(step => step.complete).length, totalCount: steps.length };
+}
+
 function activeBudgetAccounts_() {
   return records_(SHEETS.BUDGET_ACCOUNTS).filter(item => String(item.active || "TRUE").toUpperCase() !== "FALSE");
 }
@@ -1426,6 +1700,7 @@ function activeInventoryItems_() {
 
 function financeDashboard_() {
   const transactions = records_(SHEETS.BUDGET_TRANSACTIONS).sort((a, b) => String(b.transaction_date || b.created_at).localeCompare(String(a.transaction_date || a.created_at)));
+  const receipts = records_(SHEETS.RECEIPTS).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).map(receiptView_);
   const accounts = activeBudgetAccounts_().map(account => {
     const rows = transactions.filter(item => String(item.budget_account_id) === String(account.budget_account_id));
     const committed = roundMoney_(rows.filter(item => item.transaction_type === "Commitment" && item.status === "Active").reduce((sum, item) => sum + positiveOrZero_(item.amount), 0));
@@ -1442,13 +1717,14 @@ function financeDashboard_() {
     return Object.assign({}, item, { quantityOnHand, reorderLevel, needsReorder: reorderLevel > 0 && quantityOnHand <= reorderLevel });
   }).sort((a, b) => String(a.ingredient_name).localeCompare(String(b.ingredient_name)));
   return {
-    accounts, transactions: transactions.slice(0, 100), inventory, inventoryTransactions: inventoryTransactions.slice(0, 100),
+    accounts, transactions: transactions.slice(0, 100), receipts: receipts.slice(0, 100), inventory, inventoryTransactions: inventoryTransactions.slice(0, 100),
     summary: {
       allocated: roundMoney_(accounts.reduce((sum, item) => sum + item.allocated, 0)),
       committed: roundMoney_(accounts.reduce((sum, item) => sum + item.committed, 0)),
       spent: roundMoney_(accounts.reduce((sum, item) => sum + item.spent, 0)),
       available: roundMoney_(accounts.reduce((sum, item) => sum + item.available, 0)),
-      lowStock: inventory.filter(item => item.needsReorder).length
+      lowStock: inventory.filter(item => item.needsReorder).length,
+      receiptDrafts: receipts.filter(item => item.status === "Draft").length
     }
   };
 }

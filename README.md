@@ -8,13 +8,15 @@ This repository is intentionally standalone. It does not share Git history, depl
 
 `Google Form request → protected teacher application → private Event Order draft → costing, budget, and production planning → deliberate publication → service → private closeout`
 
-The Teacher Command Center now includes a responsive operations dashboard, request queue, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, event audit history, an approved Recipe Library with event-level scaling, a full production planner, private budget management, and private operational closeout.
+The Teacher Command Center now includes a responsive operations dashboard, request queue, guided event workflow, structured menu and production editors, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, event audit history, an approved Recipe Library with event-level scaling, a full production planner, private budget management, receipt-photo capture, and private operational closeout.
 
 Recipe drafts and approvals create immutable versions. Attaching a recipe to an event stores the approved version with that Event Order, so later master-recipe edits cannot silently alter existing event plans or historical publications. Private event costing now aggregates scaled ingredients, applies exact-unit package prices, accounts for stock on hand, and creates an auditable purchase plan without exposing supplier or financial data to students.
 
 Production tasks have stable IDs, phases, start times, durations, dependencies, equipment, quality controls, handoffs, and live status. The planner detects missing dependencies, dependency cycles, blocked work, and overlapping use of the same equipment. Teachers can generate a private Kitchen Management Plan; students receive only the deliberately published, generic-team production timeline.
 
 Funding accounts track allocated, committed, spent, credited, and available funds across payment methods such as the Wegmans card and approved-vendor purchase orders. Event budgets show estimated food cost, cost per guest, purchase requirements, and variance. The inventory ledger remains implemented in source and in the workbook schema, but it is deliberately disabled and hidden until routine capture can be automated enough to avoid extra teacher data entry.
+
+The streamlined financial path converts the current event purchase estimate into one refreshable commitment. A teacher can then photograph or upload a receipt; Google Drive OCR proposes the vendor, date, total, and reference in a private review draft. Posting the reviewed receipt creates the expense, fulfills the selected commitment, and updates event actual cost automatically. OCR never posts a transaction by itself.
 
 Event closeout automatically assembles planned attendance, task completion, estimated costs, linked posted expenses, and budget context. Teachers confirm actual attendance and cost, preserve only useful feedback and after-action notes, and complete the event without changing its student publication.
 

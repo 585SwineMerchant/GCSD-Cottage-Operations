@@ -9,7 +9,7 @@ The source curriculum documents support an event-centered production system. The
 | Workplace communication and teamwork | Generic team/station assignments, instructions, deadlines, and handoffs |
 | Kitchen organization and mise en place | Equipment lists, production quantities, and station-specific work |
 | Food safety and sanitation | Event-level safety controls, allergen controls, quality checks, and teacher-approved instructions |
-| Culinary mathematics and costing | Menu quantities now; scaling, market orders, and costing remain later phases |
+| Culinary mathematics and costing | Recipe scaling, production overage, package purchasing, event cost, cost per guest, and budget variance |
 | Menu planning and service | Event type, service format, customer commitment, menu, location, and guest count |
 | Work-based learning and pop-up events | Request intake, private draft, controlled publication, production packet, and generated Event Order |
 | Professional reflection and assessment | Remains in Google Classroom or other district-approved academic records |

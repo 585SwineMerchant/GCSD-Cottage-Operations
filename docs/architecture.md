@@ -25,6 +25,7 @@ The operational workbook also contains recipe, publication, and private purchasi
 | `CostSnapshots` | Append-only private estimates created whenever a purchase plan is refreshed |
 | `BudgetAccounts` | Funding registers for allocations, buildings, courses, sources, and payment methods |
 | `BudgetTransactions` | Audited commitments, expenses, and credits tied to accounts and optional events |
+| `Receipts` | Private source file links, OCR review drafts, and the posted expense they produced |
 | `EventCloseouts` | Private planned-versus-actual outcomes and reusable after-action notes |
 | `InventoryItems` | Ingredient or supply identity, opening stock, reorder point, and storage location |
 | `InventoryTransactions` | Append-only receipts, usage, waste, and adjustments tied to optional events |
@@ -40,7 +41,8 @@ The operational workbook also contains recipe, publication, and private purchasi
 7. The public-feed project reads only the latest publication snapshot.
 8. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
 9. The teacher application generates Event Orders and Kitchen Management Plans into the configured GCSD Drive folder.
-10. After service, a private closeout summarizes existing operational data; the teacher confirms actuals and completes the event.
+10. A reviewed receipt can create a posted event expense and fulfill its purchase commitment in one action.
+11. After service, a private closeout summarizes existing operational data; the teacher confirms actuals and completes the event.
 
 ## Event state model
 
@@ -88,7 +90,11 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Later phases will add receipt capture automation and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Recipe Studio export/import remains a later phase.
+
+## Receipt automation contract
+
+Receipt images and PDFs remain in a private `Receipts` subfolder beneath the configured project document folder. Google Drive OCR creates candidate text; deterministic parsing proposes vendor, date, total, and reference. The record stays a `Draft` until a teacher reviews it. Posting creates one audited `Expense`, optionally changes one matching `Active` commitment to `Fulfilled`, and links the transaction back to the receipt. Retrying a purchase-plan commitment refreshes its existing automatic record instead of creating duplicates. Receipt source files, OCR text, supplier details, and financial values never enter the public snapshot.
 
 ## Budget and inventory contract
 

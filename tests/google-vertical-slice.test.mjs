@@ -662,3 +662,61 @@ test("budget controls are visible, inventory controls are dormant, and private d
   assert.match(teacher, /Received/);
   assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price|customer_feedback|actual_cost/);
 });
+
+test("receipt OCR parsing extracts review candidates without posting financial data", async () => {
+  const context = await teacherContext();
+  const parsed = context.parseReceiptText_(`WEGMANS FOOD MARKETS\nReceipt # 48291\n09/19/2026 18:42\nSubtotal 23.40\nTax 1.60\nTOTAL $25.00`);
+  assert.equal(parsed.vendor, "WEGMANS FOOD MARKETS");
+  assert.equal(parsed.transactionDate, "2026-09-19");
+  assert.equal(parsed.totalAmount, 25);
+  assert.equal(parsed.reference, "48291");
+  assert.deepEqual(Array.from(parsed.warnings), []);
+});
+
+test("purchase estimate becomes one refreshable commitment and a reviewed receipt posts the expense", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const account = context.saveBudgetAccount({ name: "Wegmans card", allocated_amount: 500 });
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-receipt", event_budget: 200, budget_account_id: account.budget_account_id }));
+  context.appendRecord_("EventPurchases", {
+    purchase_item_id: "purchase-1", event_id: "evt-receipt", ingredient_name: "Tomatoes", recipe_unit: "lb",
+    required_quantity: 10, on_hand_quantity: 0, to_purchase_quantity: 10, package_description: "10 lb case",
+    package_quantity: 10, package_price: 25, packages_needed: 1, estimated_cost: 25, supplier: "Wegmans",
+    sku: "", status: "Needed", notes: "", source_json: "[]", active: "TRUE", updated_at: "2026-09-19T12:00:00.000Z",
+    updated_by: "teacher@greececsd.org", requirement_text: ""
+  });
+  const commitment = context.createPurchaseCommitment("evt-receipt");
+  assert.equal(commitment.amount, 25);
+  assert.equal(context.createPurchaseCommitment("evt-receipt").budget_transaction_id, commitment.budget_transaction_id);
+  assert.equal(context.records_("BudgetTransactions").length, 1);
+
+  context.appendRecord_("Receipts", {
+    receipt_id: "receipt-1", file_id: "file-1", file_url: "https://drive.google.test/file-1", file_name: "receipt.jpg",
+    mime_type: "image/jpeg", ocr_status: "Completed", ocr_text: "private extracted text", vendor: "Wegmans",
+    transaction_date: "2026-09-19", total_amount: 25, reference: "48291", category: "Food", event_id: "evt-receipt",
+    budget_account_id: account.budget_account_id, commitment_id: commitment.budget_transaction_id, notes: "", status: "Draft",
+    budget_transaction_id: "", created_at: "2026-09-19T12:00:00.000Z", created_by: "teacher@greececsd.org",
+    updated_at: "2026-09-19T12:00:00.000Z", updated_by: "teacher@greececsd.org"
+  });
+  const posted = context.postReceiptExpense({ receipt_id: "receipt-1" });
+  assert.equal(posted.transaction.transaction_type, "Expense");
+  assert.equal(posted.transaction.status, "Posted");
+  assert.equal(context.findRecord_("BudgetTransactions", "budget_transaction_id", commitment.budget_transaction_id).status, "Fulfilled");
+  assert.equal(context.findRecord_("Receipts", "receipt_id", "receipt-1").status, "Posted");
+  assert.equal(context.financeDashboard_().summary.spent, 25);
+  assert.equal(context.eventCloseout_("evt-receipt").summary.linkedPostedSpend, 25);
+  assert.equal("ocr_text" in context.financeDashboard_().receipts[0], false);
+});
+
+test("teacher UI provides guided workflow, structured editors, and private receipt review", async () => {
+  const html = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  const manifest = JSON.parse(await readFile(new URL("../apps-script/teacher/appsscript.json", import.meta.url), "utf8"));
+  assert.match(html, /id="eventWorkflow"/);
+  assert.match(html, /id="receiptFile"/);
+  assert.match(html, /Upload &amp; extract receipt/);
+  assert.match(html, /installStructuredEventEditors/);
+  assert.match(html, /postReceiptExpense/);
+  assert.equal(manifest.dependencies.enabledAdvancedServices[0].serviceId, "drive");
+  assert.equal(manifest.dependencies.enabledAdvancedServices[0].version, "v3");
+});

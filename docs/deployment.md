@@ -92,3 +92,14 @@ Verify by saving one exact-unit ingredient price, building the test event purcha
 3. Create a new version of the existing GCSD-restricted teacher deployment, keeping its URL and permissions unchanged.
 4. Do not update the public-feed deployment or GitHub Pages; the public contract is unchanged.
 5. Verify a closeout draft, linked posted-expense total, event completion, Completed-event filtering, and an unchanged student publication.
+
+## Streamlining and receipt automation update (v0.7.0)
+
+1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. In the teacher Apps Script project, open **Services**, click **+**, choose **Drive API**, select version **v3**, and add it. This is equivalent to the `enabledAdvancedServices` entry in `teacher/appsscript.json`.
+3. Run `initializeWorkbook()` once. It creates the private `Receipts` tab and leaves all existing rows, publications, recipes, costs, budgets, and closeouts unchanged.
+4. Create a new version of the existing GCSD-restricted teacher deployment, keeping its URL and access policy unchanged. Approve the additional Drive permission if Google requests it.
+5. Do not update the public-feed deployment or GitHub Pages. Receipt files, OCR text, budgets, commitments, and expenses remain private and the public contract is unchanged.
+6. Verify with a non-sensitive test receipt: upload → review OCR draft → select event/account → post expense → confirm the linked commitment is fulfilled and the event closeout actual cost updates.
+
+If GCSD policy blocks the Advanced Drive service, receipt upload still preserves the original file and creates a manual review draft. Do not post an unreviewed OCR result.
