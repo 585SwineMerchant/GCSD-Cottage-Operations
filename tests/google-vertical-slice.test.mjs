@@ -412,6 +412,45 @@ test("recipe library controls and student approved-recipe access are present", a
   assert.match(student, /Safety controls/);
 });
 
+test("Recipe Studio export previews as an unsaved teacher draft without public writes", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const payload = JSON.stringify({
+    schema: "gcsd-cottage-recipe-draft", schemaVersion: 1, exportedAt: "2026-09-20T12:00:00.000Z",
+    recipe: {
+      name: "Student Test Focaccia", category: "Bakery", standardYieldQuantity: 2, standardYieldUnit: "loaves",
+      portionSize: "1 slice", allergens: "Wheat", competencies: "Yeast fermentation",
+      ingredients: [{ name: "Flour", quantity: 32, quantityText: "", unit: "oz", preparation: "scaled" }, { name: "Salt", quantity: 0, quantityText: "to taste", unit: "", preparation: "" }],
+      equipment: ["mixer"], procedure: ["Mix dough", "Ferment and bake"], safetyControls: "Use oven mitts",
+      qualityControls: ["Golden crust"], sourceNotes: "Adapted after testing"
+    }
+  });
+  const before = context.records_("Recipes").length;
+  const preview = context.previewRecipeStudioImport(payload);
+  assert.equal(preview.recipe.name, "Student Test Focaccia");
+  assert.equal(preview.recipe.ingredients[1].quantityText, "to taste");
+  assert.deepEqual(Array.from(preview.recipe.procedure), ["Mix dough", "Ferment and bake"]);
+  assert.equal(preview.recipe.status, "Draft");
+  assert.equal(context.records_("Recipes").length, before);
+  assert.throws(() => context.previewRecipeStudioImport('{"schema":"unknown","schemaVersion":1,"recipe":{}}'), /not a supported/);
+});
+
+test("public Recipe Studio remains local-only and exports the teacher import contract", async () => {
+  const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  assert.match(html, /data-student-view="studio"/);
+  assert.match(html, /id="studioView"/);
+  assert.match(html, /does not collect names, submit records, or write directly/);
+  assert.match(app, /gcsd-cottage-recipe-draft/);
+  assert.match(app, /gcsdCottageRecipeStudioV1/);
+  assert.match(app, /localStorage\.setItem\(STUDIO_KEY/);
+  assert.doesNotMatch(app, /fetch\([^)]*recipe-submissions/);
+  assert.match(teacher, /id="recipeImportText"/);
+  assert.match(teacher, /previewRecipeStudioImport/);
+});
+
 test("recipe attachment preserves selections across an automatic event save", async () => {
   const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
   const handler = teacher.match(/async function attachEventRecipe\(\)\{(.+?)\}async function detachEventRecipe/s)?.[1] || "";
