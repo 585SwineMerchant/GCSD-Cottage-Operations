@@ -47,7 +47,7 @@ configureVerticalSlice({
 });
 ```
 
-Review and approve only the Google permissions requested by this newly named project. A successful run creates `Requests`, `Events`, `Publications`, `Documents`, `Audit`, `Recipes`, `RecipeVersions`, `EventRecipes`, and `PublicationItems` tabs. The pilot requires an explicit teacher email allowlist.
+Review and approve only the Google permissions requested by this newly named project. A successful run creates the operational, recipe, publication, costing, budget, and inventory tabs managed by this project. The pilot requires an explicit teacher email allowlist.
 
 ## 3. Create the request Form
 

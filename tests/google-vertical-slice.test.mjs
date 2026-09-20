@@ -541,3 +541,77 @@ test("kitchen management plan and student-safe production timeline controls are 
   assert.match(student, /task\.status/);
   assert.match(student, /task\.startTime/);
 });
+
+test("budget accounts distinguish allocated, committed, spent, credit, and available balances", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const account = context.saveBudgetAccount({ name: "Arcadia Culinary · Wegmans card", school: "Arcadia", course: "Advanced Culinary", funding_source: "Department allocation", payment_method: "Wegmans card", allocated_amount: 1000 });
+  const commitment = context.recordBudgetTransaction({ budget_account_id: account.budget_account_id, transaction_type: "Commitment", amount: 200, status: "Active", vendor: "Wegmans" });
+  context.recordBudgetTransaction({ budget_account_id: account.budget_account_id, transaction_type: "Expense", amount: 100, status: "Posted", vendor: "Wegmans" });
+  context.recordBudgetTransaction({ budget_account_id: account.budget_account_id, transaction_type: "Credit", amount: 20, status: "Posted", vendor: "Wegmans" });
+  const finance = context.financeDashboard_();
+  assert.equal(finance.summary.allocated, 1000);
+  assert.equal(finance.summary.committed, 200);
+  assert.equal(finance.summary.spent, 80);
+  assert.equal(finance.summary.available, 720);
+  assert.equal(context.records_("BudgetTransactions").length, 3);
+  context.updateBudgetTransactionStatus(commitment.budget_transaction_id, "Fulfilled");
+  const afterFulfillment = context.financeDashboard_();
+  assert.equal(afterFulfillment.summary.committed, 0);
+  assert.equal(afterFulfillment.summary.available, 920);
+  assert.throws(() => context.updateBudgetTransactionStatus(commitment.budget_transaction_id, "Void"), /valid transaction status/);
+});
+
+test("private event budget changes do not revise the student publication", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const account = context.saveBudgetAccount({ name: "Approved vendor PO", allocated_amount: 500, payment_method: "Purchase order" });
+  const base = operationalEvent({ event_id: "evt-budget", publication_status: "Published", stage: "Published", revision: 1 });
+  base.menu_json = JSON.stringify(context.normalizeMenu_(context.parseJson_(base.menu_json, [])));
+  base.tasks_json = JSON.stringify(context.normalizeTasks_(context.parseJson_(base.tasks_json, [])));
+  context.appendRecord_("Events", base);
+  const saved = context.saveEvent({ ...base, event_budget: 250, budget_account_id: account.budget_account_id, menu: context.parseJson_(base.menu_json, []), tasks: context.parseJson_(base.tasks_json, []) });
+  assert.equal(saved.publication_status, "Published");
+  const publicEvent = context.sanitizePublicEvent_(context.findRecord_("Events", "event_id", "evt-budget"), []);
+  assert.equal(JSON.stringify(publicEvent).includes("250"), false);
+  assert.equal(JSON.stringify(publicEvent).includes(account.budget_account_id), false);
+});
+
+test("inventory movements drive purchasing and received purchases create one auditable receipt", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const item = context.saveInventoryItem({ ingredient_name: "Tomatoes", inventory_unit: "oz", opening_quantity: 16, reorder_level: 8, storage_location: "Walk-in" });
+  context.recordInventoryTransaction({ inventory_item_id: item.inventory_item_id, transaction_type: "Receipt", quantity: 4, vendor: "Wegmans" });
+  context.recordInventoryTransaction({ inventory_item_id: item.inventory_item_id, event_id: "evt-stock", transaction_type: "Usage", quantity: 5 });
+  const draft = context.saveRecipe({ name: "Tomato Test", standard_yield_quantity: 8, standard_yield_unit: "portions", ingredients: [{ name: "Tomatoes", quantity: 20, unit: "oz" }], procedure: ["Prepare"] });
+  const approved = context.approveRecipe(draft.recipe_id, "Approved");
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-stock", guest_count: 12, menu_json: JSON.stringify([{ name: "Tomato Test", required: 12 }]), tasks_json: JSON.stringify([{ name: "Tomato Test" }]), event_budget: 100 }));
+  context.attachRecipeToEvent("evt-stock", approved.recipe_id, "Tomato Test", 12, 0);
+  context.saveIngredientPrice({ ingredient_name: "Tomatoes", recipe_unit: "oz", package_description: "32 oz package", package_quantity: 32, package_price: 4.99, supplier: "Wegmans" });
+  const costing = context.generateEventPurchasePlan("evt-stock");
+  const tomatoes = costing.items.find(row => row.ingredient_name === "Tomatoes");
+  assert.equal(tomatoes.on_hand_quantity, 15);
+  assert.equal(tomatoes.to_purchase_quantity, 15);
+  assert.equal(tomatoes.packages_needed, 1);
+  assert.equal(costing.estimatedFoodCost, 4.68);
+  assert.equal(costing.costPerGuest, 0.39);
+  assert.equal(costing.budgetVariance, 95.01);
+  context.updateEventPurchaseItem(tomatoes.purchase_item_id, { on_hand_quantity: 15, status: "Received", notes: "Received in full" });
+  context.updateEventPurchaseItem(tomatoes.purchase_item_id, { on_hand_quantity: 15, status: "Received", notes: "Receipt remains idempotent" });
+  const finance = context.financeDashboard_();
+  assert.equal(finance.inventory.find(row => row.ingredient_name === "Tomatoes").quantityOnHand, 47);
+  assert.equal(context.records_("InventoryTransactions").filter(row => row.source_id === tomatoes.purchase_item_id).length, 1);
+});
+
+test("budget and inventory teacher controls are present and remain absent from the student app", async () => {
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  const student = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
+  assert.match(teacher, /Budget &amp; inventory/);
+  assert.match(teacher, /saveBudgetAccount/);
+  assert.match(teacher, /saveInventoryMovement/);
+  assert.match(teacher, /Received/);
+  assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price/);
+});

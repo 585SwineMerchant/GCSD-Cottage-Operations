@@ -66,6 +66,8 @@ Verify with one small test recipe: save draft → approve → attach to the exis
 3. Create a new version of the existing GCSD-restricted teacher deployment; keep its URL and permissions unchanged.
 4. Do not change the public-feed deployment. Costing and purchasing data is private and the public contract is unchanged.
 
+Verify by saving one exact-unit ingredient price, building the test event purchase plan, recording an on-hand amount, and generating a new private Event Order. Confirm the student site remains unchanged.
+
 ## Production planner update
 
 1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
@@ -75,4 +77,10 @@ Verify with one small test recipe: save draft → approve → attach to the exis
 5. Allow GitHub Pages to deploy the updated student timeline from `site/app.js`.
 6. Verify task readiness, a status change to `Revised draft`, generation of a Kitchen Management Plan, and republishing of the student timeline.
 
-Verify by saving one exact-unit ingredient price, building the test event purchase plan, recording an on-hand amount, and generating a new private Event Order. Confirm the student site remains unchanged.
+## Budget and inventory update
+
+1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. Run `initializeWorkbook()` once. It appends `event_budget` and `budget_account_id` to `Events` and creates `BudgetAccounts`, `BudgetTransactions`, `InventoryItems`, and `InventoryTransactions`. Existing rows remain in place.
+3. Create a new version of the existing GCSD-restricted teacher deployment, keeping its URL and permissions unchanged.
+4. Do not update the public-feed deployment. Budget, inventory, supplier, and purchasing data remain outside its allowlisted payload.
+5. Verify one funding account, one commitment and expense, an inventory receipt and usage movement, an event budget comparison, and a received purchase creating exactly one inventory receipt.

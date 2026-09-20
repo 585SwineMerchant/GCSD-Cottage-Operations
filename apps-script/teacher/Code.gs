@@ -10,7 +10,11 @@ const SHEETS = Object.freeze({
   PUBLICATION_ITEMS: "PublicationItems",
   INGREDIENT_PRICES: "IngredientPrices",
   EVENT_PURCHASES: "EventPurchases",
-  COST_SNAPSHOTS: "CostSnapshots"
+  COST_SNAPSHOTS: "CostSnapshots",
+  BUDGET_ACCOUNTS: "BudgetAccounts",
+  BUDGET_TRANSACTIONS: "BudgetTransactions",
+  INVENTORY_ITEMS: "InventoryItems",
+  INVENTORY_TRANSACTIONS: "InventoryTransactions"
 });
 
 const REQUEST_REVIEW_STATUSES = Object.freeze(["New", "Under Review", "Needs Information", "Declined"]);
@@ -19,7 +23,7 @@ const PUBLICATION_STATUSES = Object.freeze(["Never published", "Published", "Rev
 
 const HEADERS = Object.freeze({
   Requests: ["request_id", "submitted_at", "requester", "contact_name", "contact_email", "contact_phone", "event_name", "event_type", "school", "service_date", "service_time", "guest_count", "service_format", "requested_menu", "requirements", "allergens", "internal_notes", "status", "event_id", "updated_at"],
-  Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by", "lifecycle_status", "publication_status", "unpublished_at", "unpublished_by", "archived_at", "archived_by", "source_event_id"],
+  Events: ["event_id", "request_id", "event_name", "event_type", "school", "client_display_name", "service_date", "service_time", "location", "guest_count", "service_format", "requirements", "allergens", "learning_focus", "safety_controls", "menu_json", "tasks_json", "stage", "revision", "published_at", "published_by", "created_at", "updated_at", "updated_by", "lifecycle_status", "publication_status", "unpublished_at", "unpublished_by", "archived_at", "archived_by", "source_event_id", "event_budget", "budget_account_id"],
   Publications: ["publication_id", "event_id", "revision", "published_at", "published_by", "snapshot_json", "action", "reason"],
   Documents: ["document_id", "event_id", "document_type", "file_id", "file_url", "created_at", "created_by"],
   Audit: ["audit_id", "occurred_at", "actor", "action", "record_type", "record_id", "detail_json"],
@@ -29,7 +33,11 @@ const HEADERS = Object.freeze({
   PublicationItems: ["publication_item_id", "publication_id", "publication_sequence", "event_id", "event_json"],
   IngredientPrices: ["price_id", "ingredient_name", "recipe_unit", "package_description", "package_quantity", "package_price", "supplier", "sku", "notes", "active", "updated_at", "updated_by"],
   EventPurchases: ["purchase_item_id", "event_id", "ingredient_name", "recipe_unit", "required_quantity", "on_hand_quantity", "to_purchase_quantity", "package_description", "package_quantity", "package_price", "packages_needed", "estimated_cost", "supplier", "sku", "status", "notes", "source_json", "active", "updated_at", "updated_by", "requirement_text"],
-  CostSnapshots: ["cost_snapshot_id", "event_id", "created_at", "created_by", "estimated_total", "unpriced_count", "snapshot_json"]
+  CostSnapshots: ["cost_snapshot_id", "event_id", "created_at", "created_by", "estimated_total", "unpriced_count", "snapshot_json"],
+  BudgetAccounts: ["budget_account_id", "name", "school", "course", "funding_source", "payment_method", "allocated_amount", "notes", "active", "updated_at", "updated_by"],
+  BudgetTransactions: ["budget_transaction_id", "budget_account_id", "event_id", "transaction_type", "amount", "vendor", "category", "reference", "transaction_date", "status", "notes", "created_at", "created_by"],
+  InventoryItems: ["inventory_item_id", "ingredient_name", "inventory_unit", "opening_quantity", "reorder_level", "storage_location", "notes", "active", "updated_at", "updated_by"],
+  InventoryTransactions: ["inventory_transaction_id", "inventory_item_id", "event_id", "transaction_type", "quantity", "unit_cost", "vendor", "source_id", "transaction_date", "notes", "created_at", "created_by"]
 });
 
 function doGet() {
@@ -187,6 +195,7 @@ function getDashboard() {
     publications,
     documents: records_(SHEETS.DOCUMENTS).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
     recipes: recipeSummaries_(),
+    finance: financeDashboard_(),
     summary: dashboardSummary_(events)
   };
 }
@@ -206,6 +215,7 @@ function getEventWorkspace(eventId) {
     eventRecipes: eventRecipeRecords_(eventId).map(enrichEventRecipe_),
     approvedRecipes: recipeSummaries_().filter(item => item.status === "Approved"),
     ingredientPrices: activeIngredientPrices_(),
+    budgetAccounts: activeBudgetAccounts_(),
     costing: eventCosting_(eventId),
     productionPlan: analyzeProductionPlan_(event),
     publications,
@@ -428,6 +438,135 @@ function archiveIngredientPrice(priceId) {
   });
 }
 
+function saveBudgetAccount(input) {
+  const teacher = assertTeacher_();
+  if (!input) throw new Error("Budget account data is required.");
+  return withLock_(() => {
+    const existing = input.budget_account_id ? findRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", input.budget_account_id) : null;
+    if (input.budget_account_id && !existing) throw new Error("Budget account not found.");
+    const name = clean_(input.name, 200);
+    const allocatedAmount = positiveOrZero_(input.allocated_amount);
+    if (!name) throw new Error("Budget account name is required.");
+    const now = new Date().toISOString();
+    const record = {
+      budget_account_id: existing ? existing.budget_account_id : id_("budget"), name,
+      school: clean_(input.school, 100), course: clean_(input.course, 200),
+      funding_source: clean_(input.funding_source, 200), payment_method: clean_(input.payment_method, 200),
+      allocated_amount: roundMoney_(allocatedAmount), notes: clean_(input.notes, 1000),
+      active: "TRUE", updated_at: now, updated_by: teacher.email
+    };
+    if (existing) updateRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", record.budget_account_id, record);
+    else appendRecord_(SHEETS.BUDGET_ACCOUNTS, record);
+    audit_(teacher.email, existing ? "update_budget_account" : "create_budget_account", "budget_account", record.budget_account_id, { name, allocatedAmount });
+    return record;
+  });
+}
+
+function archiveBudgetAccount(budgetAccountId) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const account = findRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", budgetAccountId);
+    if (!account) throw new Error("Budget account not found.");
+    updateRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", budgetAccountId, { active: "FALSE", updated_at: new Date().toISOString(), updated_by: teacher.email });
+    audit_(teacher.email, "archive_budget_account", "budget_account", budgetAccountId, { name: account.name });
+    return { ok: true };
+  });
+}
+
+function recordBudgetTransaction(input) {
+  const teacher = assertTeacher_();
+  if (!input) throw new Error("Budget transaction data is required.");
+  const account = findRecord_(SHEETS.BUDGET_ACCOUNTS, "budget_account_id", input.budget_account_id);
+  if (!account || String(account.active || "TRUE").toUpperCase() === "FALSE") throw new Error("Choose an active budget account.");
+  const type = clean_(input.transaction_type, 50);
+  const allowedTypes = ["Commitment", "Expense", "Credit"];
+  if (!allowedTypes.includes(type)) throw new Error("Choose a valid budget transaction type.");
+  const amount = positiveNumber_(input.amount, 0);
+  if (!amount) throw new Error("Transaction amount must be greater than zero.");
+  const allowedStatuses = type === "Commitment" ? ["Active", "Released", "Fulfilled"] : ["Posted", "Void"];
+  const status = clean_(input.status, 50) || allowedStatuses[0];
+  if (!allowedStatuses.includes(status)) throw new Error("Choose a valid transaction status.");
+  return withLock_(() => {
+    const now = new Date().toISOString();
+    const record = {
+      budget_transaction_id: id_("budgettx"), budget_account_id: account.budget_account_id,
+      event_id: clean_(input.event_id, 100), transaction_type: type, amount: roundMoney_(amount),
+      vendor: clean_(input.vendor, 200), category: clean_(input.category, 100), reference: clean_(input.reference, 200),
+      transaction_date: clean_(input.transaction_date, 20) || now.slice(0, 10), status,
+      notes: clean_(input.notes, 1000), created_at: now, created_by: teacher.email
+    };
+    appendRecord_(SHEETS.BUDGET_TRANSACTIONS, record);
+    audit_(teacher.email, "record_budget_transaction", "budget_transaction", record.budget_transaction_id, { budgetAccountId: account.budget_account_id, eventId: record.event_id, type, amount: record.amount });
+    return record;
+  });
+}
+
+function updateBudgetTransactionStatus(budgetTransactionId, status) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const transaction = findRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", budgetTransactionId);
+    if (!transaction) throw new Error("Budget transaction not found.");
+    const nextStatus = clean_(status, 50);
+    const allowed = transaction.transaction_type === "Commitment" ? ["Active", "Released", "Fulfilled"] : ["Posted", "Void"];
+    if (!allowed.includes(nextStatus)) throw new Error("Choose a valid transaction status.");
+    updateRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", budgetTransactionId, { status: nextStatus });
+    audit_(teacher.email, "update_budget_transaction_status", "budget_transaction", budgetTransactionId, { previousStatus: transaction.status, status: nextStatus });
+    return findRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", budgetTransactionId);
+  });
+}
+
+function saveInventoryItem(input) {
+  const teacher = assertTeacher_();
+  if (!input) throw new Error("Inventory item data is required.");
+  return withLock_(() => {
+    const name = clean_(input.ingredient_name, 300), unit = clean_(input.inventory_unit, 100);
+    if (!name || !unit) throw new Error("Ingredient name and inventory unit are required.");
+    const existing = input.inventory_item_id
+      ? findRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", input.inventory_item_id)
+      : activeInventoryItems_().find(item => ingredientKey_(item.ingredient_name, item.inventory_unit) === ingredientKey_(name, unit));
+    if (input.inventory_item_id && !existing) throw new Error("Inventory item not found.");
+    const now = new Date().toISOString();
+    const record = {
+      inventory_item_id: existing ? existing.inventory_item_id : id_("stock"), ingredient_name: name, inventory_unit: unit,
+      opening_quantity: existing ? positiveOrZero_(existing.opening_quantity) : positiveOrZero_(input.opening_quantity),
+      reorder_level: positiveOrZero_(input.reorder_level), storage_location: clean_(input.storage_location, 200),
+      notes: clean_(input.notes, 1000), active: "TRUE", updated_at: now, updated_by: teacher.email
+    };
+    if (existing) updateRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", record.inventory_item_id, record);
+    else appendRecord_(SHEETS.INVENTORY_ITEMS, record);
+    audit_(teacher.email, existing ? "update_inventory_item" : "create_inventory_item", "inventory_item", record.inventory_item_id, { ingredientName: name, unit });
+    return record;
+  });
+}
+
+function recordInventoryTransaction(input) {
+  const teacher = assertTeacher_();
+  if (!input) throw new Error("Inventory transaction data is required.");
+  const item = findRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", input.inventory_item_id);
+  if (!item || String(item.active || "TRUE").toUpperCase() === "FALSE") throw new Error("Choose an active inventory item.");
+  const type = clean_(input.transaction_type, 50);
+  if (!["Receipt", "Usage", "Waste", "Adjustment"].includes(type)) throw new Error("Choose a valid inventory transaction type.");
+  let quantity = Number(input.quantity);
+  if (!Number.isFinite(quantity) || !quantity || (type !== "Adjustment" && quantity < 0)) throw new Error("Enter a valid inventory quantity.");
+  if (type === "Usage" || type === "Waste") quantity = -Math.abs(quantity);
+  return withLock_(() => appendInventoryTransaction_(item, {
+    eventId: clean_(input.event_id, 100), type, quantity, unitCost: positiveOrZero_(input.unit_cost),
+    vendor: clean_(input.vendor, 200), sourceId: clean_(input.source_id, 200),
+    transactionDate: clean_(input.transaction_date, 20), notes: clean_(input.notes, 1000), actor: teacher.email
+  }));
+}
+
+function archiveInventoryItem(inventoryItemId) {
+  const teacher = assertTeacher_();
+  return withLock_(() => {
+    const item = findRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", inventoryItemId);
+    if (!item) throw new Error("Inventory item not found.");
+    updateRecord_(SHEETS.INVENTORY_ITEMS, "inventory_item_id", inventoryItemId, { active: "FALSE", updated_at: new Date().toISOString(), updated_by: teacher.email });
+    audit_(teacher.email, "archive_inventory_item", "inventory_item", inventoryItemId, { ingredientName: item.ingredient_name });
+    return { ok: true };
+  });
+}
+
 function generateEventPurchasePlan(eventId) {
   const teacher = assertTeacher_();
   return withLock_(() => {
@@ -437,13 +576,15 @@ function generateEventPurchasePlan(eventId) {
     const requirements = ingredientRequirements_(eventId);
     if (!requirements.length) throw new Error("Attach at least one approved recipe before building a purchase plan.");
     const prices = activeIngredientPrices_();
+    const inventory = inventoryQuantityByKey_();
     const existing = records_(SHEETS.EVENT_PURCHASES).filter(item => String(item.event_id) === String(eventId));
     const now = new Date().toISOString();
     const activeIds = [];
     requirements.forEach(requirement => {
       const prior = existing.find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === requirement.key && String(item.active || "TRUE").toUpperCase() !== "FALSE");
       const price = prices.find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === requirement.key);
-      const onHand = positiveOrZero_(prior && prior.on_hand_quantity);
+      const inventoryOnHand = inventory[requirement.key];
+      const onHand = inventoryOnHand == null ? positiveOrZero_(prior && prior.on_hand_quantity) : positiveOrZero_(inventoryOnHand);
       const qualitativeOnly = !requirement.requiredQuantity && Boolean(requirement.requirementText);
       const toPurchase = qualitativeOnly ? 0 : roundQuantity_(Math.max(requirement.requiredQuantity - onHand, 0));
       const packageQuantity = positiveNumber_(price && price.package_quantity, 0);
@@ -484,7 +625,7 @@ function updateEventPurchaseItem(purchaseItemId, input) {
   return withLock_(() => {
     const item = findRecord_(SHEETS.EVENT_PURCHASES, "purchase_item_id", purchaseItemId);
     if (!item || String(item.active || "TRUE").toUpperCase() === "FALSE") throw new Error("Purchase item not found.");
-    const statuses = ["Needed", "Ordered", "Purchased", "Not needed", "As needed"];
+    const statuses = ["Needed", "Ordered", "Purchased", "Received", "Substituted", "Unavailable", "Not needed", "As needed"];
     const status = clean_(input && input.status, 50) || "Needed";
     if (!statuses.includes(status)) throw new Error("Invalid purchasing status.");
     const onHand = positiveOrZero_(input && input.on_hand_quantity);
@@ -500,6 +641,18 @@ function updateEventPurchaseItem(purchaseItemId, input) {
       notes: clean_(input && input.notes, 1000), updated_at: new Date().toISOString(), updated_by: teacher.email
     };
     updateRecord_(SHEETS.EVENT_PURCHASES, "purchase_item_id", purchaseItemId, patch);
+    if (status === "Received" && !records_(SHEETS.INVENTORY_TRANSACTIONS).some(transaction => String(transaction.source_id) === String(purchaseItemId) && transaction.transaction_type === "Receipt")) {
+      const quantityReceived = roundQuantity_(positiveOrZero_(patch.packages_needed) * positiveOrZero_(item.package_quantity));
+      if (quantityReceived > 0) {
+        const inventoryItem = ensureInventoryItem_(item.ingredient_name, item.recipe_unit, teacher.email);
+        appendInventoryTransaction_(inventoryItem, {
+          eventId: item.event_id, type: "Receipt", quantity: quantityReceived,
+          unitCost: quantityReceived ? roundMoney_(positiveOrZero_(patch.estimated_cost) / quantityReceived) : 0,
+          vendor: item.supplier, sourceId: purchaseItemId, transactionDate: new Date().toISOString().slice(0, 10),
+          notes: `Received from event purchase plan: ${item.package_description || item.ingredient_name}`, actor: teacher.email
+        });
+      }
+    }
     audit_(teacher.email, "update_purchase_item", "event", item.event_id, { purchaseItemId, status, onHand });
     return eventCosting_(item.event_id);
   });
@@ -525,7 +678,8 @@ function acceptRequest(requestId, reviewNote) {
       stage: "Draft", revision: 0, published_at: "", published_by: "",
       created_at: now, updated_at: now, updated_by: teacher.email,
       lifecycle_status: "Planning", publication_status: "Never published",
-      unpublished_at: "", unpublished_by: "", archived_at: "", archived_by: "", source_event_id: ""
+      unpublished_at: "", unpublished_by: "", archived_at: "", archived_by: "", source_event_id: "",
+      event_budget: "", budget_account_id: ""
     };
     appendRecord_(SHEETS.EVENTS, event);
     updateRecord_(SHEETS.REQUESTS, "request_id", requestId, {
@@ -559,13 +713,16 @@ function saveEvent(input) {
       allergens: clean_(input.allergens, 4000),
       learning_focus: clean_(input.learning_focus, 2000),
       safety_controls: clean_(input.safety_controls, 4000),
+      event_budget: roundMoney_(positiveOrZero_(input.event_budget)),
+      budget_account_id: clean_(input.budget_account_id, 100),
       menu_json: JSON.stringify(normalizeMenu_(input.menu)),
       tasks_json: JSON.stringify(normalizeTasks_(input.tasks))
     };
     const changed = Object.keys(patch).some(field => String(existing[field] || "") !== String(patch[field] || ""));
     if (!changed) return existing;
+    const publicChanged = Object.keys(patch).filter(field => !["event_budget", "budget_account_id"].includes(field)).some(field => String(existing[field] || "") !== String(patch[field] || ""));
     const currentPublication = publicationStatus_(existing);
-    patch.publication_status = currentPublication === "Published" ? "Revised draft" : currentPublication;
+    patch.publication_status = publicChanged && currentPublication === "Published" ? "Revised draft" : currentPublication;
     patch.stage = displayStage_(eventLifecycle_(existing), patch.publication_status);
     patch.updated_at = now;
     patch.updated_by = teacher.email;
@@ -801,7 +958,8 @@ function generateEventDocument(eventId) {
   const costing = eventCosting_(eventId);
   if (costing.items.length) {
     body.appendParagraph("Private costing and purchasing").setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    body.appendParagraph(`Estimated purchase total: $${costing.estimatedTotal.toFixed(2)} · Unpriced ingredients: ${costing.unpricedCount}`);
+    body.appendParagraph(`Estimated food cost: $${costing.estimatedFoodCost.toFixed(2)} · Cost per guest: $${costing.costPerGuest.toFixed(2)} · Estimated purchase total: $${costing.estimatedTotal.toFixed(2)} · Unpriced ingredients: ${costing.unpricedCount}`);
+    if (costing.eventBudget) body.appendParagraph(`Event budget: $${costing.eventBudget.toFixed(2)} · Remaining after estimated purchases: $${costing.budgetVariance.toFixed(2)}`);
     costing.items.forEach(item => {
       const requirement = [item.required_quantity ? `${item.required_quantity} ${item.recipe_unit}`.trim() : "", item.requirement_text].filter(Boolean).join(" · ") || "As needed";
       body.appendParagraph(`${item.ingredient_name} · ${requirement}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
@@ -1138,12 +1296,91 @@ function eventCosting_(eventId) {
       estimated_cost: positiveOrZero_(item.estimated_cost), requirement_text: clean_(item.requirement_text, 200), sources: parseJson_(item.source_json, [])
     }))
     .sort((a, b) => String(a.ingredient_name).localeCompare(String(b.ingredient_name)) || String(a.recipe_unit).localeCompare(String(b.recipe_unit)));
+  const event = findRecord_(SHEETS.EVENTS, "event_id", eventId) || {};
+  const estimatedFoodCost = roundMoney_(items.reduce((total, item) => {
+    const required = positiveOrZero_(item.required_quantity), packageQuantity = positiveOrZero_(item.package_quantity), packagePrice = positiveOrZero_(item.package_price);
+    return total + (required && packageQuantity && packagePrice ? required / packageQuantity * packagePrice : 0);
+  }, 0));
+  const estimatedTotal = roundMoney_(items.reduce((total, item) => total + positiveOrZero_(item.estimated_cost), 0));
+  const eventBudget = roundMoney_(positiveOrZero_(event.event_budget));
   return {
     items,
-    estimatedTotal: roundMoney_(items.reduce((total, item) => total + positiveOrZero_(item.estimated_cost), 0)),
+    estimatedTotal,
+    estimatedFoodCost,
+    costPerGuest: positiveInteger_(event.guest_count, 0) ? roundMoney_(estimatedFoodCost / positiveInteger_(event.guest_count, 0)) : 0,
+    eventBudget,
+    budgetVariance: eventBudget ? roundMoney_(eventBudget - estimatedTotal) : 0,
+    budgetAccountId: clean_(event.budget_account_id, 100),
     unpricedCount: items.filter(item => positiveNumber_(item.required_quantity, 0) && (!positiveNumber_(item.package_quantity, 0) || !positiveNumber_(item.package_price, 0))).length,
     latestSnapshot: records_(SHEETS.COST_SNAPSHOTS).filter(item => String(item.event_id) === String(eventId)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
   };
+}
+
+function activeBudgetAccounts_() {
+  return records_(SHEETS.BUDGET_ACCOUNTS).filter(item => String(item.active || "TRUE").toUpperCase() !== "FALSE");
+}
+
+function activeInventoryItems_() {
+  return records_(SHEETS.INVENTORY_ITEMS).filter(item => String(item.active || "TRUE").toUpperCase() !== "FALSE");
+}
+
+function financeDashboard_() {
+  const transactions = records_(SHEETS.BUDGET_TRANSACTIONS).sort((a, b) => String(b.transaction_date || b.created_at).localeCompare(String(a.transaction_date || a.created_at)));
+  const accounts = activeBudgetAccounts_().map(account => {
+    const rows = transactions.filter(item => String(item.budget_account_id) === String(account.budget_account_id));
+    const committed = roundMoney_(rows.filter(item => item.transaction_type === "Commitment" && item.status === "Active").reduce((sum, item) => sum + positiveOrZero_(item.amount), 0));
+    const expenses = rows.filter(item => item.status === "Posted" && ["Expense", "Credit"].includes(item.transaction_type));
+    const spent = roundMoney_(expenses.reduce((sum, item) => sum + (item.transaction_type === "Credit" ? -positiveOrZero_(item.amount) : positiveOrZero_(item.amount)), 0));
+    const allocated = roundMoney_(positiveOrZero_(account.allocated_amount));
+    return Object.assign({}, account, { allocated, committed, spent, available: roundMoney_(allocated - committed - spent) });
+  });
+  const inventoryTransactions = records_(SHEETS.INVENTORY_TRANSACTIONS).sort((a, b) => String(b.transaction_date || b.created_at).localeCompare(String(a.transaction_date || a.created_at)));
+  const inventory = activeInventoryItems_().map(item => {
+    const movements = inventoryTransactions.filter(transaction => String(transaction.inventory_item_id) === String(item.inventory_item_id));
+    const quantityOnHand = roundQuantity_(positiveOrZero_(item.opening_quantity) + movements.reduce((sum, transaction) => sum + Number(transaction.quantity || 0), 0));
+    const reorderLevel = positiveOrZero_(item.reorder_level);
+    return Object.assign({}, item, { quantityOnHand, reorderLevel, needsReorder: reorderLevel > 0 && quantityOnHand <= reorderLevel });
+  }).sort((a, b) => String(a.ingredient_name).localeCompare(String(b.ingredient_name)));
+  return {
+    accounts, transactions: transactions.slice(0, 100), inventory, inventoryTransactions: inventoryTransactions.slice(0, 100),
+    summary: {
+      allocated: roundMoney_(accounts.reduce((sum, item) => sum + item.allocated, 0)),
+      committed: roundMoney_(accounts.reduce((sum, item) => sum + item.committed, 0)),
+      spent: roundMoney_(accounts.reduce((sum, item) => sum + item.spent, 0)),
+      available: roundMoney_(accounts.reduce((sum, item) => sum + item.available, 0)),
+      lowStock: inventory.filter(item => item.needsReorder).length
+    }
+  };
+}
+
+function inventoryQuantityByKey_() {
+  return Object.fromEntries(financeDashboard_().inventory.map(item => [ingredientKey_(item.ingredient_name, item.inventory_unit), item.quantityOnHand]));
+}
+
+function ensureInventoryItem_(name, unit, actor) {
+  const existing = activeInventoryItems_().find(item => ingredientKey_(item.ingredient_name, item.inventory_unit) === ingredientKey_(name, unit));
+  if (existing) return existing;
+  const now = new Date().toISOString();
+  const record = {
+    inventory_item_id: id_("stock"), ingredient_name: clean_(name, 300), inventory_unit: clean_(unit, 100),
+    opening_quantity: 0, reorder_level: 0, storage_location: "", notes: "Created from received event purchase",
+    active: "TRUE", updated_at: now, updated_by: actor
+  };
+  appendRecord_(SHEETS.INVENTORY_ITEMS, record);
+  return record;
+}
+
+function appendInventoryTransaction_(item, input) {
+  const now = new Date().toISOString();
+  const record = {
+    inventory_transaction_id: id_("stocktx"), inventory_item_id: item.inventory_item_id,
+    event_id: clean_(input.eventId, 100), transaction_type: clean_(input.type, 50), quantity: roundQuantity_(Number(input.quantity)),
+    unit_cost: roundMoney_(positiveOrZero_(input.unitCost)), vendor: clean_(input.vendor, 200), source_id: clean_(input.sourceId, 200),
+    transaction_date: clean_(input.transactionDate, 20) || now.slice(0, 10), notes: clean_(input.notes, 1000), created_at: now, created_by: input.actor
+  };
+  appendRecord_(SHEETS.INVENTORY_TRANSACTIONS, record);
+  audit_(input.actor, "record_inventory_transaction", "inventory_transaction", record.inventory_transaction_id, { inventoryItemId: item.inventory_item_id, eventId: record.event_id, type: record.transaction_type, quantity: record.quantity });
+  return record;
 }
 
 function ingredientKey_(name, unit) { return `${clean_(name, 300).toLowerCase()}|${clean_(unit, 100).toLowerCase()}`; }
@@ -1327,7 +1564,7 @@ function findRecord_(sheetName, key, value) {
 }
 
 function updateRecord_(sheetName, key, value, patch) {
-  if ([SHEETS.PUBLICATIONS, SHEETS.PUBLICATION_ITEMS, SHEETS.RECIPE_VERSIONS, SHEETS.COST_SNAPSHOTS, SHEETS.AUDIT].includes(sheetName)) {
+  if ([SHEETS.PUBLICATIONS, SHEETS.PUBLICATION_ITEMS, SHEETS.RECIPE_VERSIONS, SHEETS.COST_SNAPSHOTS, SHEETS.INVENTORY_TRANSACTIONS, SHEETS.AUDIT].includes(sheetName)) {
     throw new Error(`${sheetName} is append-only.`);
   }
   const record = findRecord_(sheetName, key, value);

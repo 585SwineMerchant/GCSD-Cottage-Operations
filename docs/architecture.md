@@ -23,6 +23,10 @@ The operational workbook also contains recipe, publication, and private purchasi
 | `IngredientPrices` | Reusable private supplier/package prices matched by ingredient name and recipe unit |
 | `EventPurchases` | Event-specific required, on-hand, purchase, package, cost, and status records |
 | `CostSnapshots` | Append-only private estimates created whenever a purchase plan is refreshed |
+| `BudgetAccounts` | Funding registers for allocations, buildings, courses, sources, and payment methods |
+| `BudgetTransactions` | Audited commitments, expenses, and credits tied to accounts and optional events |
+| `InventoryItems` | Ingredient or supply identity, opening stock, reorder point, and storage location |
+| `InventoryTransactions` | Append-only receipts, usage, waste, and adjustments tied to optional events |
 
 ## Data flow
 
@@ -82,7 +86,13 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, and Kitchen Management documents are complete in source. Later phases will add broader budgets and inventory, operational closeout, and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, and inventory ledger are complete in source. Later phases will add operational closeout and Recipe Studio export/import.
+
+## Budget and inventory contract
+
+Budget accounts distinguish allocated, committed, spent, credited, and available balances across payment methods. Commitments count only while `Active` and may be explicitly marked `Fulfilled` or `Released`; every status change is audited. Posted expenses increase spent funds and posted credits reduce them. Event budget targets and account assignments are private and do not create a revised student draft by themselves.
+
+Inventory quantity is reconstructed from each item's opening quantity plus its append-only movement history. Receipts add stock; usage and waste subtract stock; adjustments may add or subtract. Exact ingredient-name and unit matching allows an event purchase plan to use current stock before calculating packages to buy. Marking a purchase `Received` creates one source-linked receipt and cannot duplicate that receipt if saved again.
 
 ## Production planning contract
 
