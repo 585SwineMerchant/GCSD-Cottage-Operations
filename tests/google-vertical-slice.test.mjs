@@ -654,6 +654,7 @@ test("budget controls are visible, inventory controls are dormant, and private d
   assert.match(teacher, /Budget management/);
   assert.match(teacher, /saveBudgetAccount/);
   assert.match(teacher, /data-inactive-feature="inventory" hidden/);
+  assert.match(teacher, /\[hidden\]\{display:none!important\}/);
   assert.match(teacher, /Private event closeout/);
   assert.match(teacher, /saveEventCloseout/);
   assert.match(teacher, /Received/);
