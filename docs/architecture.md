@@ -94,7 +94,7 @@ The infrastructure, privacy gate, Command Center foundation, Recipe Library, app
 
 ## Recipe Studio transfer contract
 
-The anonymous public application never writes recipes to the workbook. Recipe Studio work remains in browser storage and exports a versioned `gcsd-cottage-recipe-draft` JSON document without a student name, account identifier, or submission record. The protected Teacher Command Center validates that export and opens it as an unsaved recipe draft. Importing cannot approve, publish, attach, or overwrite a recipe; a teacher must deliberately save and approve the new immutable version.
+The anonymous public application never writes recipes to the workbook. Recipe Studio work remains in browser storage and exports a versioned `gcsd-cottage-recipe-draft` JSON document without a student name, account identifier, or submission record. Copied text and browser-side screenshot OCR feed the same deterministic parser. It proposes structured fields and explicitly reports missing yield, ingredients, or procedure instead of inventing them. The screenshot stays in the browser; only the OCR library and English recognition model are lazy-loaded from the major-version-pinned Tesseract.js CDN. If that dependency is blocked, copied-text import and manual entry remain available. The protected Teacher Command Center validates the export and opens it as an unsaved recipe draft. Importing cannot approve, publish, attach, or overwrite a recipe; a teacher must deliberately save and approve the new immutable version.
 
 ## Receipt automation contract
 
