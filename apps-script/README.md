@@ -102,7 +102,7 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, request queue, guided event workflow, structured menu/task editors, publication controls, document and audit history, the versioned Recipe Library, event costing and purchasing, the full production planner, private budget management, receipt-photo review, and operational closeout. Ingredient aliases and compatible-unit conversion connect approved recipes to the price catalog. Funding accounts, transaction ledgers, receipt originals/OCR, event purchases, closeout actuals, and immutable event cost snapshots remain teacher-only; only allowlisted product/package planning prices are public for the student Costing Lab. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation; Recipe Studio import remains a later version-two stage.
+The protected application now includes the operations dashboard, request queue, guided event workflow, structured menu/task editors, publication controls, document and audit history, the versioned Recipe Library, Recipe Studio draft import, event costing and purchasing, the full production planner, private budget management, receipt-photo review, and operational closeout. Ingredient aliases and compatible-unit conversion connect approved recipes to the price catalog. Funding accounts, transaction ledgers, receipt originals/OCR, event purchases, closeout actuals, and immutable event cost snapshots remain teacher-only; only allowlisted product/package planning prices are public for the student Costing Lab. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation.
 
 The receipt release adds `Receipts` and uses Google Drive OCR. In the teacher Apps Script project, add the **Drive API** under **Services** (identifier `Drive`, version `v3`), or copy the repository's `appsscript.json` manifest. Receipt capture still saves a private review draft if OCR is unavailable, but automated extraction requires the service.
 
@@ -134,5 +134,7 @@ The migration accepts the existing managed headers as an exact prefix, appends m
 6. Preview and publish. The student site and generated Event Order use the pinned, scaled version.
 
 Editing the master recipe later does not alter the event attachment. Approve the revision and use **Attach or refresh approved version** when an event should deliberately adopt it.
+
+The public Recipe Studio stores work only in the student's browser. **Copy teacher-review export** or **Download JSON** produces a structured draft without student identity. In the protected Command Center, open **Recipes → Import a Recipe Studio draft**, paste the JSON, and load it into a new unsaved teacher draft. Review, correct, save, and approve it through the same workflow as any other recipe.
 
 For a click-by-click protected-account session, use [`../docs/weekend-google-setup.md`](../docs/weekend-google-setup.md).
