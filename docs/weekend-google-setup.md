@@ -86,7 +86,7 @@ Anonymous access is the district-policy gate. If that access choice is unavailab
 
 ## 6. Connect the independent GitHub site
 
-Provide the two `/exec` URLs to the repository maintainer or place them in `site/config.js` using `site/config.example.js` as the pattern. These deployment URLs are identifiers, not passwords, but they must belong only to this project. Do not add spreadsheet IDs, folder IDs, private Form editing URLs, or account credentials to GitHub.
+Place only the Public Feed and Recipe Import `/exec` URLs in `site/config.js` using `site/config.example.js` as the pattern. Keep the Teacher Command Center URL in a district-controlled staff bookmark rather than displaying it on the public student site. Deployment URLs are identifiers, not passwords, but they must belong only to this project. Do not add spreadsheet IDs, folder IDs, private Form editing URLs, or account credentials to GitHub.
 
 Run:
 
