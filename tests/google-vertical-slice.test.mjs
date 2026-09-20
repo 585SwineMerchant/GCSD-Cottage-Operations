@@ -130,6 +130,8 @@ test("GitHub student view is manual-refresh and read-only", async () => {
   assert.equal(source.includes("data-save-progress"), false);
   assert.equal(source.includes("/progress"), false);
   assert.match(source, /publicFeedUrl/);
+  assert.doesNotMatch(html, /teacherCommandCenterLink|Teacher Command Center/);
+  assert.doesNotMatch(source, /teacherCommandCenterUrl/);
 });
 
 test("publication validation requires the minimum operational event fields", async () => {
