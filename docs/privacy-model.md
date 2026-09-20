@@ -12,13 +12,14 @@
 - Equipment, quality controls, deadlines, instructions, and handoffs
 - Publication revision and timestamp
 - Approved recipe version, scaled yield, ingredients, equipment, procedure, safety controls, quality controls, and event-level competencies
+- Sanitized product/package planning prices: public ingredient/product names, aliases, package size/unit, package price, vendor/store label, price type, checked date, public product URL, and variable-weight/estimated-count flags
 
 ## Public student snapshot must never contain
 
 - Student names, email addresses, IDs, rosters, or individual roles
 - Client email address, phone number, billing data, or private correspondence
 - Internal teacher notes
-- Budgets, supplier pricing, or purchasing records
+- Budgets, funding accounts, receipt images or OCR text, actual purchase history, commitments, or event purchasing records
 - Master-recipe audit metadata and private version notes
 - Staff audit history
 - Recipe authorship or identifiable student submissions
@@ -26,9 +27,9 @@
 
 The sanitizer constructs a new allowlisted object. It does not remove a few blocked fields from the private event record. Automated tests deliberately place private values in source records and confirm none survive publication.
 
-Published recipe data uses the same allowlist approach. Supplier prices, purchasing metadata, author identity, version notes, and recipe audit history are excluded. The event receives a pinned approved snapshot rather than a live reference to the working master recipe.
+Published recipe data uses the same allowlist approach. Purchasing metadata, author identity, version notes, and recipe audit history are excluded. The event receives a pinned approved snapshot rather than a live reference to the working master recipe.
 
-Ingredient price records, suppliers, SKUs, on-hand counts, package estimates, purchase statuses, notes, and immutable cost snapshots are private operational data. They may appear in the protected Teacher Command Center and generated private Event Order, but the public sanitizer has no fields through which to publish them.
+The public feed separately sanitizes the price catalog for the Costing Lab. It omits SKUs, notes, teacher identity, receipt IDs, OCR text, event links, update history, and all financial-account data. On-hand counts, packages actually purchased, purchase statuses, actual event spend, and immutable event cost snapshots remain private.
 
 Funding accounts, allocations, payment methods, commitments, expenses, credits, available balances, event budget targets, storage locations, reorder levels, and inventory movement history are also private. They live only in protected workbook tabs and teacher responses. Editing a private event budget does not change the student publication state.
 

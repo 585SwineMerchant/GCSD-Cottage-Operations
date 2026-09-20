@@ -38,12 +38,12 @@ const HEADERS = Object.freeze({
   RecipeVersions: ["recipe_version_id", "recipe_id", "version", "status", "created_at", "created_by", "change_note", "snapshot_json"],
   EventRecipes: ["event_recipe_id", "event_id", "menu_item_name", "recipe_id", "recipe_version", "required_quantity", "overage_percent", "snapshot_json", "active", "attached_at", "attached_by", "updated_at", "updated_by"],
   PublicationItems: ["publication_item_id", "publication_id", "publication_sequence", "event_id", "event_json"],
-  IngredientPrices: ["price_id", "ingredient_name", "recipe_unit", "package_description", "package_quantity", "package_price", "supplier", "sku", "notes", "active", "updated_at", "updated_by"],
+  IngredientPrices: ["price_id", "ingredient_name", "recipe_unit", "package_description", "package_quantity", "package_price", "supplier", "sku", "notes", "active", "updated_at", "updated_by", "product_name", "aliases_json", "package_unit", "price_type", "store_location", "checked_at", "product_url", "source", "variable_weight", "estimated_count"],
   EventPurchases: ["purchase_item_id", "event_id", "ingredient_name", "recipe_unit", "required_quantity", "on_hand_quantity", "to_purchase_quantity", "package_description", "package_quantity", "package_price", "packages_needed", "estimated_cost", "supplier", "sku", "status", "notes", "source_json", "active", "updated_at", "updated_by", "requirement_text"],
   CostSnapshots: ["cost_snapshot_id", "event_id", "created_at", "created_by", "estimated_total", "unpriced_count", "snapshot_json"],
   BudgetAccounts: ["budget_account_id", "name", "school", "course", "funding_source", "payment_method", "allocated_amount", "notes", "active", "updated_at", "updated_by"],
   BudgetTransactions: ["budget_transaction_id", "budget_account_id", "event_id", "transaction_type", "amount", "vendor", "category", "reference", "transaction_date", "status", "notes", "created_at", "created_by"],
-  Receipts: ["receipt_id", "file_id", "file_url", "file_name", "mime_type", "ocr_status", "ocr_text", "vendor", "transaction_date", "total_amount", "reference", "category", "event_id", "budget_account_id", "commitment_id", "notes", "status", "budget_transaction_id", "created_at", "created_by", "updated_at", "updated_by"],
+  Receipts: ["receipt_id", "file_id", "file_url", "file_name", "mime_type", "ocr_status", "ocr_text", "vendor", "transaction_date", "total_amount", "reference", "category", "event_id", "budget_account_id", "commitment_id", "notes", "status", "budget_transaction_id", "created_at", "created_by", "updated_at", "updated_by", "line_items_json", "catalog_review_status"],
   EventCloseouts: ["closeout_id", "event_id", "completed_on", "outcome", "actual_guest_count", "actual_cost", "actual_cost_source", "customer_feedback", "successes", "issues", "follow_up", "finalized_at", "finalized_by", "created_at", "created_by", "updated_at", "updated_by"],
   InventoryItems: ["inventory_item_id", "ingredient_name", "inventory_unit", "opening_quantity", "reorder_level", "storage_location", "notes", "active", "updated_at", "updated_by"],
   InventoryTransactions: ["inventory_transaction_id", "inventory_item_id", "event_id", "transaction_type", "quantity", "unit_cost", "vendor", "source_id", "transaction_date", "notes", "created_at", "created_by"]
@@ -112,6 +112,28 @@ function initializeWorkbook_() {
       }
     }
     sheet.setFrozenRows(1);
+  });
+  seedStarterPriceCatalog_();
+}
+
+function seedStarterPriceCatalog_() {
+  if (typeof STARTER_PRICE_CATALOG === "undefined" || !Array.isArray(STARTER_PRICE_CATALOG)) return;
+  const existingIds = new Set(records_(SHEETS.INGREDIENT_PRICES).map(item => String(item.price_id)));
+  STARTER_PRICE_CATALOG.forEach(product => {
+    const priceId = `seed_${product.id}`;
+    if (existingIds.has(priceId)) return;
+    appendRecord_(SHEETS.INGREDIENT_PRICES, {
+      price_id: priceId, ingredient_name: product.aliases[0] || product.productName,
+      recipe_unit: product.packageUnit, package_description: product.packageDescription,
+      package_quantity: product.packageQuantity, package_price: product.packagePrice,
+      supplier: product.supplier || "Wegmans", sku: product.id, notes: "Starter estimate; verify before purchase.",
+      active: "TRUE", updated_at: `${product.checkedAt}T12:00:00.000Z`, updated_by: "starter catalog",
+      product_name: product.productName, aliases_json: JSON.stringify(product.aliases || []),
+      package_unit: product.packageUnit, price_type: product.priceType || "online shelf estimate",
+      store_location: product.storeLocation || "Culver Ridge", checked_at: product.checkedAt,
+      product_url: product.productUrl || "", source: "starter snapshot",
+      variable_weight: product.variableWeight ? "TRUE" : "FALSE", estimated_count: product.estimatedCount ? "TRUE" : "FALSE"
+    });
   });
 }
 
@@ -422,8 +444,8 @@ function saveIngredientPrice(input) {
   const teacher = assertTeacher_();
   if (!input) throw new Error("Ingredient price data is required.");
   return withLock_(() => {
-    const name = clean_(input.ingredient_name, 300);
-    const unit = clean_(input.recipe_unit, 100);
+    const name = clean_(input.ingredient_name || input.product_name, 300);
+    const unit = canonicalUnit_(input.recipe_unit || input.package_unit);
     const existing = input.price_id ? findRecord_(SHEETS.INGREDIENT_PRICES, "price_id", input.price_id) : activeIngredientPrices_().find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === ingredientKey_(name, unit));
     if (input.price_id && !existing) throw new Error("Ingredient price record not found.");
     const packageQuantity = positiveNumber_(input.package_quantity, 0);
@@ -431,11 +453,19 @@ function saveIngredientPrice(input) {
     if (!name || !unit) throw new Error("Ingredient name and recipe unit are required.");
     if (!packageQuantity || !packagePrice) throw new Error("Package quantity and package price must be greater than zero.");
     const now = new Date().toISOString();
+    const aliases = Array.isArray(input.aliases) ? input.aliases : String(input.aliases_text || "").split(/[,\n]/);
+    const checkedAt = clean_(input.checked_at, 20) || now.slice(0, 10);
     const record = {
       price_id: existing ? existing.price_id : id_("price"), ingredient_name: name, recipe_unit: unit,
       package_description: clean_(input.package_description, 300), package_quantity: packageQuantity,
-      package_price: roundMoney_(packagePrice), supplier: clean_(input.supplier, 200), sku: clean_(input.sku, 200),
-      notes: clean_(input.notes, 1000), active: "TRUE", updated_at: now, updated_by: teacher.email
+      package_price: roundMoney_(packagePrice), supplier: clean_(input.supplier || "Wegmans", 200), sku: clean_(input.sku, 200),
+      notes: clean_(input.notes, 1000), active: "TRUE", updated_at: now, updated_by: teacher.email,
+      product_name: clean_(input.product_name || name, 300),
+      aliases_json: JSON.stringify([...new Set([name].concat(aliases).map(value => normalizeIngredientName_(value)).filter(Boolean))]),
+      package_unit: canonicalUnit_(input.package_unit || unit), price_type: clean_(input.price_type || "teacher verified", 100),
+      store_location: clean_(input.store_location || "Culver Ridge", 200), checked_at: checkedAt,
+      product_url: safeHttpUrl_(input.product_url), source: clean_(input.source || "teacher entry", 100),
+      variable_weight: input.variable_weight ? "TRUE" : "FALSE", estimated_count: input.estimated_count ? "TRUE" : "FALSE"
     };
     if (existing) updateRecord_(SHEETS.INGREDIENT_PRICES, "price_id", record.price_id, record);
     else appendRecord_(SHEETS.INGREDIENT_PRICES, record);
@@ -619,7 +649,8 @@ function captureReceipt(input) {
     total_amount: parsed.totalAmount || "", reference: parsed.reference, category: "Food",
     event_id: clean_(input.event_id, 100), budget_account_id: clean_(input.budget_account_id, 100),
     commitment_id: clean_(input.commitment_id, 100), notes: clean_(input.notes, 1000), status: "Draft",
-    budget_transaction_id: "", created_at: now, created_by: teacher.email, updated_at: now, updated_by: teacher.email
+    budget_transaction_id: "", created_at: now, created_by: teacher.email, updated_at: now, updated_by: teacher.email,
+    line_items_json: JSON.stringify(parsed.lineItems || []), catalog_review_status: (parsed.lineItems || []).length ? "Needs review" : "No line items detected"
   };
   appendRecord_(SHEETS.RECEIPTS, record);
   audit_(teacher.email, "capture_receipt", "receipt", record.receipt_id, { fileId: record.file_id, ocrStatus, eventId: record.event_id });
@@ -640,6 +671,7 @@ function saveReceiptDraft(input) {
       reference: clean_(input.reference, 200), category: clean_(input.category, 100),
       event_id: clean_(input.event_id, 100), budget_account_id: clean_(input.budget_account_id, 100),
       commitment_id: clean_(input.commitment_id, 100), notes: clean_(input.notes, 1000),
+      line_items_json: JSON.stringify(normalizeReceiptLineItems_(input.line_items)), catalog_review_status: clean_(input.catalog_review_status || "Needs review", 50),
       updated_at: new Date().toISOString(), updated_by: teacher.email
     };
     updateRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id, patch);
@@ -681,14 +713,17 @@ function postReceiptExpense(input) {
     };
     if (!existingExpense) appendRecord_(SHEETS.BUDGET_TRANSACTIONS, transaction);
     if (commitment) updateRecord_(SHEETS.BUDGET_TRANSACTIONS, "budget_transaction_id", commitmentId, { status: "Fulfilled" });
+    const lineItems = normalizeReceiptLineItems_(input.line_items == null ? parseJson_(receipt.line_items_json, []) : input.line_items);
+    const catalogUpdates = input.learn_catalog ? updateCatalogFromReceipt_(lineItems, transaction, receipt.receipt_id, teacher.email) : [];
     updateRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id, {
       vendor: transaction.vendor, transaction_date: transaction.transaction_date, total_amount: amount,
       reference: transaction.reference, category: transaction.category, event_id: eventId,
       budget_account_id: accountId, commitment_id: commitmentId, notes: transaction.notes,
-      status: "Posted", budget_transaction_id: transaction.budget_transaction_id, updated_at: now, updated_by: teacher.email
+      status: "Posted", budget_transaction_id: transaction.budget_transaction_id, updated_at: now, updated_by: teacher.email,
+      line_items_json: JSON.stringify(lineItems), catalog_review_status: input.learn_catalog ? `Reviewed · ${catalogUpdates.length} price update${catalogUpdates.length === 1 ? "" : "s"}` : "Reviewed · catalog unchanged"
     });
-    audit_(teacher.email, "post_receipt_expense", "receipt", receipt.receipt_id, { transactionId: transaction.budget_transaction_id, commitmentId, eventId, amount });
-    return { receipt: receiptView_(findRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id)), transaction };
+    audit_(teacher.email, "post_receipt_expense", "receipt", receipt.receipt_id, { transactionId: transaction.budget_transaction_id, commitmentId, eventId, amount, catalogUpdates: catalogUpdates.length });
+    return { receipt: receiptView_(findRecord_(SHEETS.RECEIPTS, "receipt_id", receipt.receipt_id)), transaction, catalogUpdates };
   });
 }
 
@@ -762,13 +797,80 @@ function parseReceiptText_(text) {
   if (!vendor) warnings.push("Vendor was not confidently detected.");
   const referenceLine = lines.find(line => /\b(receipt|invoice|order|transaction)\s*(#|no\.?|number|id|:)\s*[a-z0-9-]+/i.test(line)) || "";
   const referenceMatch = referenceLine.match(/\b(?:receipt|invoice|order|transaction)\s*(?:#|no\.?|number|id|:)\s*([a-z0-9-]+)/i);
-  return { vendor, transactionDate, totalAmount: totalAmount ? roundMoney_(totalAmount) : 0, reference: referenceMatch ? referenceMatch[1] : "", warnings };
+  let catalog = [];
+  try { catalog = activeIngredientPrices_(); } catch (_) { /* parser remains usable in tests and before workbook configuration */ }
+  const lineItems = lines.map((line, index) => {
+    if (/\b(subtotal|tax|total|savings|payment|change|balance|amount due|visa|mastercard|cash|debit|credit)\b/i.test(line)) return null;
+    const values = moneyValues(line);
+    if (!values.length || !/[a-z]/i.test(line)) return null;
+    const price = values[values.length - 1];
+    const name = clean_(line.replace(/(?:\$\s*)?\d{1,6}(?:,\d{3})*\.\d{2}\b/g, " ").replace(/\b\d{8,14}\b/g, " ").replace(/\s+/g, " ").trim(), 200);
+    if (!name || name.length < 2) return null;
+    const matched = findCatalogByName_(name, catalog);
+    return {
+      id: `line-${index + 1}`, receiptText: line, ingredientName: matched ? matched.ingredient_name : name,
+      productName: matched ? matched.product_name || matched.ingredient_name : name, packagesPurchased: 1,
+      lineTotal: roundMoney_(price), packagePrice: roundMoney_(price),
+      packageQuantity: matched ? positiveNumber_(matched.package_quantity, 0) : 0,
+      packageUnit: matched ? canonicalUnit_(matched.package_unit || matched.recipe_unit) : "",
+      packageDescription: matched ? matched.package_description : "", aliasesText: matched ? (matched.aliases || []).join(", ") : "",
+      matchedPriceId: matched ? matched.price_id : "", updateCatalog: Boolean(matched)
+    };
+  }).filter(Boolean).slice(0, 100);
+  if (!lineItems.length) warnings.push("Item-level prices were not confidently detected; add them during review if catalog learning is needed.");
+  return { vendor, transactionDate, totalAmount: totalAmount ? roundMoney_(totalAmount) : 0, reference: referenceMatch ? referenceMatch[1] : "", warnings, lineItems };
+}
+
+function findCatalogByName_(name, catalog) {
+  const target = normalizeIngredientName_(name);
+  return (catalog || []).map(price => {
+    const names = [price.ingredient_name, price.product_name].concat(price.aliases || parseJson_(price.aliases_json, [])).map(normalizeIngredientName_).filter(Boolean);
+    const exact = names.includes(target), partial = names.some(alias => alias.length > 3 && (target.includes(alias) || alias.includes(target)));
+    return { price, score: exact ? 100 : partial ? 60 : 0 };
+  }).filter(item => item.score).sort((a, b) => b.score - a.score || String(b.price.checked_at).localeCompare(String(a.price.checked_at)))[0]?.price || null;
+}
+
+function normalizeReceiptLineItems_(items) {
+  if (typeof items === "string") items = parseJson_(items, []);
+  if (!Array.isArray(items)) return [];
+  return items.slice(0, 100).map((item, index) => ({
+    id: clean_(item && item.id || `line-${index + 1}`, 100), receiptText: clean_(item && item.receiptText, 300),
+    ingredientName: clean_(item && item.ingredientName, 300), productName: clean_(item && (item.productName || item.ingredientName), 300),
+    packagesPurchased: positiveNumber_(item && item.packagesPurchased, 1), lineTotal: roundMoney_(positiveOrZero_(item && item.lineTotal)),
+    packagePrice: roundMoney_(positiveOrZero_(item && item.packagePrice)), packageQuantity: positiveOrZero_(item && item.packageQuantity),
+    packageUnit: canonicalUnit_(item && item.packageUnit), packageDescription: clean_(item && item.packageDescription, 300),
+    aliasesText: clean_(item && item.aliasesText, 1000), matchedPriceId: clean_(item && item.matchedPriceId, 100), updateCatalog: Boolean(item && item.updateCatalog)
+  })).filter(item => item.ingredientName || item.productName);
+}
+
+function updateCatalogFromReceipt_(lineItems, transaction, receiptId, actor) {
+  const updates = [];
+  (lineItems || []).filter(item => item.updateCatalog).forEach(item => {
+    if (!item.ingredientName || !item.packageQuantity || !item.packageUnit) return;
+    const packagePrice = item.packagePrice || (item.packagesPurchased ? roundMoney_(item.lineTotal / item.packagesPurchased) : 0);
+    if (!packagePrice) return;
+    const existing = item.matchedPriceId ? findRecord_(SHEETS.INGREDIENT_PRICES, "price_id", item.matchedPriceId) : findCatalogByName_(item.ingredientName, activeIngredientPrices_());
+    const now = new Date().toISOString(), date = clean_(transaction.transaction_date, 20) || now.slice(0, 10);
+    const aliases = [...new Set([item.ingredientName].concat(String(item.aliasesText || "").split(/[,\n]/)).map(normalizeIngredientName_).filter(Boolean))];
+    const record = {
+      price_id: existing ? existing.price_id : id_("price"), ingredient_name: item.ingredientName, recipe_unit: item.packageUnit,
+      package_description: item.packageDescription, package_quantity: item.packageQuantity, package_price: packagePrice,
+      supplier: clean_(transaction.vendor || "Wegmans", 200), sku: existing ? existing.sku : "", notes: `Teacher-reviewed receipt ${receiptId}`,
+      active: "TRUE", updated_at: now, updated_by: actor, product_name: item.productName || item.ingredientName,
+      aliases_json: JSON.stringify(aliases), package_unit: item.packageUnit, price_type: "receipt actual",
+      store_location: existing ? existing.store_location : "Culver Ridge", checked_at: date,
+      product_url: existing ? existing.product_url : "", source: "reviewed receipt", variable_weight: existing ? existing.variable_weight : "FALSE", estimated_count: existing ? existing.estimated_count : "FALSE"
+    };
+    if (existing) updateRecord_(SHEETS.INGREDIENT_PRICES, "price_id", record.price_id, record); else appendRecord_(SHEETS.INGREDIENT_PRICES, record);
+    updates.push(record);
+  });
+  return updates;
 }
 
 function receiptView_(receipt) {
   if (!receipt) return null;
   const { ocr_text, ...safe } = receipt;
-  return Object.assign({}, safe, { total_amount: receipt.total_amount === "" ? "" : positiveOrZero_(receipt.total_amount) });
+  return Object.assign({}, safe, { total_amount: receipt.total_amount === "" ? "" : positiveOrZero_(receipt.total_amount), line_items: normalizeReceiptLineItems_(receipt.line_items_json) });
 }
 
 function safeFileName_(value) {
@@ -845,12 +947,13 @@ function generateEventPurchasePlan(eventId) {
     const activeIds = [];
     requirements.forEach(requirement => {
       const prior = existing.find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === requirement.key && String(item.active || "TRUE").toUpperCase() !== "FALSE");
-      const price = prices.find(item => ingredientKey_(item.ingredient_name, item.recipe_unit) === requirement.key);
+      const priceMatch = findIngredientPrice_(requirement.ingredientName, requirement.recipeUnit, prices);
+      const price = priceMatch && priceMatch.price;
       const inventoryOnHand = inventory[requirement.key];
       const onHand = inventoryOnHand == null ? positiveOrZero_(prior && prior.on_hand_quantity) : positiveOrZero_(inventoryOnHand);
       const qualitativeOnly = !requirement.requiredQuantity && Boolean(requirement.requirementText);
       const toPurchase = qualitativeOnly ? 0 : roundQuantity_(Math.max(requirement.requiredQuantity - onHand, 0));
-      const packageQuantity = positiveNumber_(price && price.package_quantity, 0);
+      const packageQuantity = positiveNumber_(priceMatch && priceMatch.converted, 0);
       const packagesNeeded = packageQuantity ? Math.ceil(toPurchase / packageQuantity) : 0;
       const estimatedCost = price ? roundMoney_(packagesNeeded * positiveNumber_(price.package_price, 0)) : 0;
       const record = {
@@ -860,7 +963,7 @@ function generateEventPurchasePlan(eventId) {
         package_description: price ? price.package_description : "", package_quantity: packageQuantity, package_price: price ? positiveNumber_(price.package_price, 0) : 0,
         packages_needed: packagesNeeded, estimated_cost: estimatedCost, supplier: price ? price.supplier : "",
         sku: price ? price.sku : "", status: prior ? clean_(prior.status, 50) || (qualitativeOnly ? "As needed" : "Needed") : (qualitativeOnly ? "As needed" : "Needed"),
-        notes: prior ? clean_(prior.notes, 1000) : "", source_json: JSON.stringify(requirement.sources),
+        notes: prior ? clean_(prior.notes, 1000) : "", source_json: JSON.stringify({ requirements: requirement.sources, price: price ? { priceId: price.price_id, productName: price.product_name || price.ingredient_name, packageUnit: price.package_unit || price.recipe_unit, checkedAt: price.checked_at, freshness: price.freshness, priceType: price.price_type, storeLocation: price.store_location, productUrl: price.product_url } : null }),
         active: "TRUE", updated_at: now, updated_by: teacher.email, requirement_text: requirement.requirementText
       };
       if (prior) updateRecord_(SHEETS.EVENT_PURCHASES, "purchase_item_id", prior.purchase_item_id, record);
@@ -1557,6 +1660,8 @@ function scaleRecipeSnapshot_(attachment) {
   return {
     name: clean_(recipe.name, 300), version: Number(recipe.version || attachment.recipe_version || 0),
     yield: `${roundQuantity_(productionTarget)} ${clean_(recipe.standardYieldUnit, 100)}`.trim(),
+    standardYieldQuantity: positiveNumber_(recipe.standardYieldQuantity, 0), standardYieldUnit: clean_(recipe.standardYieldUnit, 100),
+    productionTarget: roundQuantity_(productionTarget), ingredientData: normalizeRecipeIngredients_(recipe.ingredients || []),
     portion: clean_(recipe.portionSize, 200), ingredients,
     equipment: list_(recipe.equipment, 100, 200), procedure: list_(recipe.procedure, 200, 1000),
     allergens: clean_(recipe.allergens, 2000), safetyControls: clean_(recipe.safetyControls, 4000),
@@ -1568,7 +1673,49 @@ function scaleRecipeSnapshot_(attachment) {
 function activeIngredientPrices_() {
   return records_(SHEETS.INGREDIENT_PRICES)
     .filter(item => String(item.active || "TRUE").toUpperCase() !== "FALSE")
+    .map(item => {
+      const checkedAt = clean_(item.checked_at || String(item.updated_at || "").slice(0, 10), 20);
+      const ageDays = checkedAt ? Math.max(0, Math.floor((Date.now() - new Date(`${checkedAt}T12:00:00Z`).getTime()) / 86400000)) : null;
+      return Object.assign({}, item, {
+        aliases: parseJson_(item.aliases_json, []), package_unit: canonicalUnit_(item.package_unit || item.recipe_unit),
+        checked_at: checkedAt, age_days: ageDays, freshness: ageDays == null ? "unknown" : ageDays > 45 ? "stale" : ageDays > 30 ? "aging" : "current"
+      });
+    })
     .sort((a, b) => String(a.ingredient_name).localeCompare(String(b.ingredient_name)) || String(a.recipe_unit).localeCompare(String(b.recipe_unit)));
+}
+
+function normalizeIngredientName_(value) {
+  return clean_(value, 300).toLowerCase().replace(/\([^)]*\)/g, " ").replace(/\b(fresh|diced|minced|chopped|sliced|grated|shredded|melted|softened|cold|large|small)\b/g, " ").replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function canonicalUnit_(value) {
+  const unit = clean_(value, 100).toLowerCase().replace(/\./g, "").trim();
+  const aliases = { pound: "lb", pounds: "lb", lbs: "lb", ounce: "oz", ounces: "oz", fluidounce: "fl oz", "fluid ounce": "fl oz", "fluid ounces": "fl oz", floz: "fl oz", gallon: "gal", gallons: "gal", quart: "qt", quarts: "qt", pint: "pt", pints: "pt", cups: "cup", tablespoons: "tbsp", tablespoon: "tbsp", teaspoons: "tsp", teaspoon: "tsp", count: "each", ea: "each", item: "each", items: "each" };
+  return aliases[unit] || unit;
+}
+
+function unitBase_(quantity, unit) {
+  const canonical = canonicalUnit_(unit);
+  const factors = { lb: ["mass", 16], oz: ["mass", 1], gal: ["volume", 128], qt: ["volume", 32], pt: ["volume", 16], cup: ["volume", 8], "fl oz": ["volume", 1], tbsp: ["volume", 0.5], tsp: ["volume", 1 / 6], each: ["count", 1] };
+  const factor = factors[canonical];
+  return factor ? { dimension: factor[0], quantity: positiveNumber_(quantity, 0) * factor[1] } : null;
+}
+
+function convertQuantity_(quantity, fromUnit, toUnit) {
+  const from = unitBase_(quantity, fromUnit), to = unitBase_(1, toUnit);
+  return from && to && from.dimension === to.dimension ? roundQuantity_(from.quantity / to.quantity) : 0;
+}
+
+function findIngredientPrice_(name, recipeUnit, prices) {
+  const target = normalizeIngredientName_(name), unit = canonicalUnit_(recipeUnit);
+  const candidates = (prices || []).map(price => {
+    const names = [price.ingredient_name, price.product_name].concat(price.aliases || parseJson_(price.aliases_json, [])).map(normalizeIngredientName_).filter(Boolean);
+    const nameScore = names[0] === target ? 100 : names.includes(target) ? 90 : names.some(alias => alias.length > 3 && (target.includes(alias) || alias.includes(target))) ? 60 : 0;
+    const packageUnit = canonicalUnit_(price.package_unit || price.recipe_unit);
+    const converted = convertQuantity_(price.package_quantity, packageUnit, unit);
+    return nameScore && converted ? { price, score: nameScore + (price.freshness === "current" ? 5 : 0), converted } : null;
+  }).filter(Boolean).sort((a, b) => b.score - a.score || String(b.price.checked_at).localeCompare(String(a.price.checked_at)));
+  return candidates[0] || null;
 }
 
 function ingredientRequirements_(eventId) {
@@ -1623,6 +1770,7 @@ function eventCosting_(eventId) {
     budgetVariance: eventBudget ? roundMoney_(eventBudget - estimatedTotal) : 0,
     budgetAccountId: clean_(event.budget_account_id, 100),
     unpricedCount: items.filter(item => positiveNumber_(item.required_quantity, 0) && (!positiveNumber_(item.package_quantity, 0) || !positiveNumber_(item.package_price, 0))).length,
+    stalePriceCount: items.filter(item => parseJson_(item.source_json, {}).price && parseJson_(item.source_json, {}).price.freshness === "stale").length,
     latestSnapshot: records_(SHEETS.COST_SNAPSHOTS).filter(item => String(item.event_id) === String(eventId)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
   };
 }
@@ -1759,7 +1907,12 @@ function appendInventoryTransaction_(item, input) {
   return record;
 }
 
-function ingredientKey_(name, unit) { return `${clean_(name, 300).toLowerCase()}|${clean_(unit, 100).toLowerCase()}`; }
+function ingredientKey_(name, unit) { return `${normalizeIngredientName_(name)}|${canonicalUnit_(unit)}`; }
+
+function safeHttpUrl_(value) {
+  const url = clean_(value, 1000);
+  return /^https:\/\/[a-z0-9.-]+(?:\/|$)/i.test(url) ? url : "";
+}
 
 function markEventOperationalChange_(event, actor) {
   const currentPublication = publicationStatus_(event);

@@ -4,8 +4,10 @@ import vm from "node:vm";
 import test from "node:test";
 
 async function teacherContext(globals = {}) {
+  const catalog = await readFile(new URL("../apps-script/teacher/Catalog.gs", import.meta.url), "utf8");
   const source = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
   const context = vm.createContext({ console, ...globals });
+  vm.runInContext(catalog, context, { filename: "Catalog.gs" });
   vm.runInContext(source, context, { filename: "Code.gs" });
   return context;
 }
@@ -495,7 +497,7 @@ test("qualitative ingredients remain visible but are excluded from automatic cos
   assert.equal(salt.requirement_text, "to taste");
   assert.equal(salt.required_quantity, 0);
   assert.equal(salt.status, "As needed");
-  assert.equal(costing.unpricedCount, 1);
+  assert.equal(costing.unpricedCount, 0);
 });
 
 test("production planner detects missing dependencies, cycles, and equipment overlaps", async () => {
@@ -660,7 +662,9 @@ test("budget controls are visible, inventory controls are dormant, and private d
   assert.match(teacher, /q\("#saveCloseout"\)\.onclick=\(\)=>saveCloseout\(false\)/);
   assert.doesNotMatch(teacher, /onclick="saveCloseout/);
   assert.match(teacher, /Received/);
-  assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price|customer_feedback|actual_cost/);
+  assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|customer_feedback|actual_cost/);
+  assert.match(student, /priceCatalog/);
+  assert.match(student, /Costing Lab|costingView|renderCostAnalysis/);
 });
 
 test("receipt OCR parsing extracts review candidates without posting financial data", async () => {
@@ -670,7 +674,38 @@ test("receipt OCR parsing extracts review candidates without posting financial d
   assert.equal(parsed.transactionDate, "2026-09-19");
   assert.equal(parsed.totalAmount, 25);
   assert.equal(parsed.reference, "48291");
-  assert.deepEqual(Array.from(parsed.warnings), []);
+  assert.equal(parsed.lineItems.length, 0);
+  assert.match(parsed.warnings.join(" "), /Item-level prices/);
+});
+
+test("starter catalog seeds independently and matches aliases with compatible units", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const prices = context.activeIngredientPrices_();
+  assert.equal(prices.length, 77);
+  const flour = context.findIngredientPrice_("AP flour", "oz", prices);
+  assert.equal(flour.price.supplier, "Wegmans");
+  assert.equal(flour.price.store_location, "Culver Ridge");
+  assert.equal(flour.converted, 80);
+  context.initializeWorkbook();
+  assert.equal(context.activeIngredientPrices_().length, 77, "starter migration must be idempotent");
+});
+
+test("only reviewed receipt lines update the price catalog", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const milk = context.activeIngredientPrices_().find(item => item.price_id === "seed_weg-milk");
+  const ignored = context.updateCatalogFromReceipt_([{ ingredientName: "whole milk", packageQuantity: 128, packageUnit: "fl oz", packagePrice: 4.25, matchedPriceId: milk.price_id, updateCatalog: false }], { vendor: "Wegmans", transaction_date: "2026-09-20" }, "receipt-test", "teacher@greececsd.org");
+  assert.equal(ignored.length, 0);
+  assert.equal(Number(context.findRecord_("IngredientPrices", "price_id", milk.price_id).package_price), 3.69);
+  const updates = context.updateCatalogFromReceipt_([{ ingredientName: "whole milk", productName: "Wegmans Whole Milk", packageQuantity: 128, packageUnit: "fl oz", packagePrice: 4.25, packageDescription: "1 gallon", matchedPriceId: milk.price_id, updateCatalog: true }], { vendor: "Wegmans", transaction_date: "2026-09-20" }, "receipt-test", "teacher@greececsd.org");
+  assert.equal(updates.length, 1);
+  const revised = context.findRecord_("IngredientPrices", "price_id", milk.price_id);
+  assert.equal(Number(revised.package_price), 4.25);
+  assert.equal(revised.price_type, "receipt actual");
+  assert.equal(revised.source, "reviewed receipt");
 });
 
 test("purchase estimate becomes one refreshable commitment and a reviewed receipt posts the expense", async () => {

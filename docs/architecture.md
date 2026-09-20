@@ -4,9 +4,9 @@
 
 | Component | Host | Access | Data authority |
 |---|---|---|---|
-| Student production site | This repository's GitHub Pages deployment | Anonymous, read-only | Published snapshot only |
+| Student production site | This repository's GitHub Pages deployment | Anonymous, read-only | Published event snapshots and sanitized planning-price catalog |
 | Teacher Command Center | Standalone Apps Script project | Approved GCSD staff | Operational Google Sheet |
-| Public publication feed | Separate Apps Script project | Anonymous, read-only | `Publications` tab only |
+| Public publication feed | Separate Apps Script project | Anonymous, read-only | `Publications`, `PublicationItems`, and allowlisted `IngredientPrices` fields only |
 | Client request intake | Google Form | Anyone with the published link may respond; no Google login required | Restricted `Requests` tab |
 | Operational records | New Google Sheet under the GCSD account's My Drive | Approved staff | System of record |
 | Generated documents | New `Generated Event Documents` folder under the project folder | Drive permissions | Event packet records |
@@ -20,12 +20,12 @@ The operational workbook also contains recipe, publication, and private purchasi
 | `RecipeVersions` | Append-only snapshots of every saved and approved version |
 | `EventRecipes` | Approved versions pinned to event menu items, including production quantity and overage |
 | `PublicationItems` | Append-only, one-event-per-row payloads for schema-three public snapshots |
-| `IngredientPrices` | Reusable private supplier/package prices matched by ingredient name and recipe unit |
+| `IngredientPrices` | Reusable product/package prices, aliases, compatible units, source/date metadata, and freshness; only an explicit safe subset is public |
 | `EventPurchases` | Event-specific required, on-hand, purchase, package, cost, and status records |
 | `CostSnapshots` | Append-only private estimates created whenever a purchase plan is refreshed |
 | `BudgetAccounts` | Funding registers for allocations, buildings, courses, sources, and payment methods |
 | `BudgetTransactions` | Audited commitments, expenses, and credits tied to accounts and optional events |
-| `Receipts` | Private source file links, OCR review drafts, and the posted expense they produced |
+| `Receipts` | Private source file links, OCR review drafts, reviewed line items, catalog-update decision, and the posted expense they produced |
 | `EventCloseouts` | Private planned-versus-actual outcomes and reusable after-action notes |
 | `InventoryItems` | Ingredient or supply identity, opening stock, reorder point, and storage location |
 | `InventoryTransactions` | Append-only receipts, usage, waste, and adjustments tied to optional events |
@@ -38,10 +38,10 @@ The operational workbook also contains recipe, publication, and private purchasi
 4. Only `Accepted` creates a private Event Order draft. Declined requests never create Event records.
 5. Draft saves never alter what students see.
 6. **Publish to students** creates an immutable sanitized snapshot with a revision and timestamp.
-7. The public-feed project reads only the latest publication snapshot.
-8. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
+7. The public-feed project reads the latest publication snapshot plus an allowlisted product/package price catalog.
+8. The student site loads that public data once when opened and again only when **Refresh Event Data** is pressed. Student Costing Lab inputs remain browser-local and are not submitted.
 9. The teacher application generates Event Orders and Kitchen Management Plans into the configured GCSD Drive folder.
-10. A reviewed receipt can create a posted event expense and fulfill its purchase commitment in one action.
+10. A reviewed receipt can create a posted event expense, fulfill its purchase commitment, and deliberately update checked catalog lines in one action.
 11. After service, a private closeout summarizes existing operational data; the teacher confirms actuals and completes the event.
 
 ## Event state model
@@ -90,11 +90,11 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Recipe Studio export/import remains a later phase.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, Wegmans-first catalog, receipt-assisted price learning, Student Costing Lab, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Recipe Studio export/import remains a later phase.
 
 ## Receipt automation contract
 
-Receipt images and PDFs remain in a private `Receipts` subfolder beneath the configured project document folder. Google Drive OCR creates candidate text; deterministic parsing proposes vendor, date, total, and reference. The record stays a `Draft` until a teacher reviews it. Posting creates one audited `Expense`, optionally changes one matching `Active` commitment to `Fulfilled`, and links the transaction back to the receipt. Retrying a purchase-plan commitment refreshes its existing automatic record instead of creating duplicates. Receipt source files, OCR text, supplier details, and financial values never enter the public snapshot.
+Receipt images and PDFs remain in a private `Receipts` subfolder beneath the configured project document folder. Google Drive OCR creates candidate text; deterministic parsing proposes vendor, date, total, reference, and possible product lines. The record stays a `Draft` until a teacher reviews it. Posting creates one audited `Expense`, optionally changes one matching `Active` commitment to `Fulfilled`, and links the transaction back to the receipt. Only checked lines with complete package details may update the reusable catalog. Retrying a purchase-plan commitment refreshes its existing automatic record instead of creating duplicates. Receipt files, OCR text, totals, transaction links, notes, and staff identity never enter the public feed; a later public catalog record contains only the independently useful product/package price and check date.
 
 ## Budget and inventory contract
 

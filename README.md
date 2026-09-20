@@ -10,7 +10,9 @@ This repository is intentionally standalone. It does not share Git history, depl
 
 The Teacher Command Center now includes a responsive operations dashboard, request queue, guided event workflow, structured menu and production editors, individual event workspaces, structured publication validation, separate operational and publication states, privacy-safe preview, immutable revision history, unpublish/republish, clone, archive/restore, document history, event audit history, an approved Recipe Library with event-level scaling, a full production planner, private budget management, receipt-photo capture, and private operational closeout.
 
-Recipe drafts and approvals create immutable versions. Attaching a recipe to an event stores the approved version with that Event Order, so later master-recipe edits cannot silently alter existing event plans or historical publications. Private event costing now aggregates scaled ingredients, applies exact-unit package prices, accounts for stock on hand, and creates an auditable purchase plan without exposing supplier or financial data to students.
+Recipe drafts and approvals create immutable versions. Attaching a recipe to an event stores the approved version with that Event Order, so later master-recipe edits cannot silently alter existing event plans or historical publications. Private event costing aggregates scaled ingredients, matches ingredient aliases across compatible weight, volume, and count units, and creates an auditable frozen purchase-plan snapshot.
+
+The price catalog begins with 77 independently copied Wegmans planning estimates, defaulting to Culver Ridge, and grows through teacher-reviewed receipt lines. Prices retain their package, source type, location, checked date, URL, and freshness status. The public Costing Lab receives only the sanitized product/package catalog and approved published recipe data; students can practice scaling, AP/EP yield, food-cost percentage, portion and menu pricing, market orders, and menu-engineering classification without saving data to the teacher system.
 
 Production tasks have stable IDs, phases, start times, durations, dependencies, equipment, quality controls, handoffs, and live status. The planner detects missing dependencies, dependency cycles, blocked work, and overlapping use of the same equipment. Teachers can generate a private Kitchen Management Plan; students receive only the deliberately published, generic-team production timeline.
 
@@ -31,7 +33,7 @@ Event closeout automatically assembles planned attendance, task completion, esti
 ## Non-negotiable separation
 
 - Student names, email addresses, IDs, rosters, and individual roles belong in Google Classroom, not this application.
-- Client contact information, budgets, private notes, audit records, and supplier data never enter the public publication payload.
+- Client contact information, budgets, private notes, audit records, receipts, purchase history, and funding data never enter the public payload. Only sanitized product/package planning prices may be public.
 - The teacher application and public feed remain separate Apps Script projects and deployments.
 - This repository never reuses another project's Worker, D1 database, OAuth client, Cloudflare configuration, GitHub Pages workflow, or deployment secret.
 - Version-one code may be consulted as a reference, but features are deliberately ported into this repository rather than developed on a branch of version one.

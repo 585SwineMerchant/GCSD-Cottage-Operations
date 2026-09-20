@@ -103,3 +103,18 @@ Verify by saving one exact-unit ingredient price, building the test event purcha
 6. Verify with a non-sensitive test receipt: upload → review OCR draft → select event/account → post expense → confirm the linked commitment is fulfilled and the event closeout actual cost updates.
 
 If GCSD policy blocks the Advanced Drive service, receipt upload still preserves the original file and creates a manual review draft. Do not post an unreviewed OCR result.
+
+## Wegmans catalog and Student Costing Lab update (v0.8.0)
+
+This update includes the unreleased v0.7 workflow and OCR work. Install it as one consolidated release:
+
+1. In the teacher Apps Script project, replace `Code.gs` and `Index.html`, then create a new script file named `Catalog.gs` and paste the repository version into it.
+2. Keep the Advanced Drive API v3 service enabled for OCR.
+3. Run `initializeWorkbook()` once. It appends catalog metadata and receipt-review columns without moving or deleting existing data, then idempotently adds any missing items from the 77-product starter catalog.
+4. Deploy a new version of the existing GCSD-restricted teacher web app without changing its `/exec` URL or access policy.
+5. Replace the separate public-feed project's `Code.gs`, then deploy a new version of that existing anonymous read-only web app without changing its `/exec` URL.
+6. Allow GitHub Pages to deploy the updated `site/` files. The existing `site/config.js` URLs remain unchanged.
+
+Verify in this order: catalog count and stale labels → alias/unit match in an event purchase plan → receipt upload and review → post with one checked catalog update → confirm the catalog price/source date changed → open the public Costing Lab anonymously → load a published recipe → confirm scaling, AP/EP yield, portion cost, target menu price, market order, and menu-engineering result.
+
+The starter prices are estimates captured on 2026-08-02, not a live Wegmans feed. The application does not scrape Wegmans. Existing event cost snapshots remain frozen when catalog prices change.

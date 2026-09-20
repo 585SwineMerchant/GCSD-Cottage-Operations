@@ -9,7 +9,7 @@ The source curriculum documents support an event-centered production system. The
 | Workplace communication and teamwork | Generic team/station assignments, instructions, deadlines, and handoffs |
 | Kitchen organization and mise en place | Equipment lists, production quantities, and station-specific work |
 | Food safety and sanitation | Event-level safety controls, allergen controls, quality checks, and teacher-approved instructions |
-| Culinary mathematics and costing | Recipe scaling, production overage, package purchasing, event cost, cost per guest, and budget variance |
+| Culinary mathematics and costing | Recipe scaling, production overage, AP/EP yield, package purchasing, event cost, portion cost, food-cost percentage, target menu price, contribution margin, and budget variance |
 | Menu planning and service | Event type, service format, customer commitment, menu, location, and guest count |
 | Work-based learning and pop-up events | Request intake, private draft, controlled publication, production packet, and generated Event Order |
 | Professional reflection and assessment | Remains in Google Classroom or other district-approved academic records |
@@ -17,6 +17,8 @@ The source curriculum documents support an event-centered production system. The
 The initial skill vocabulary can be drawn from the supplied scope-and-sequence, employability profile, and pathway skills map: food safety, equipment, knife skills, culinary math, nutrition, menu planning, marketing, baking, produce, grains, eggs and dairy, proteins, stocks and sauces, sustainability, global cuisine, communication, resource management, and quality of work.
 
 The Recipe Library stores this vocabulary as event-level recipe competencies. These labels describe the instructional focus of production work; they do not store individual student ratings, grades, attendance, or certification results. Standard yields and event scaling directly support culinary math, portion control, resource management, and quality-control instruction.
+
+The anonymous Student Costing Lab extends that work without creating a student record. A learner may load a published approved recipe, change yield, enter AP/EP yield percentages, evaluate package requirements, calculate portion and menu price, and classify an item as Star, Plowhorse, Puzzle, or Dog against teacher-provided popularity and contribution-margin benchmarks. Inputs are not submitted to the operational workbook; students may print the result or use the district's approved classroom workflow.
 
 ## Deliberate privacy boundary
 

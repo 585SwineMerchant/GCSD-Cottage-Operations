@@ -16,6 +16,8 @@
   </header>
 
   <main id="main">
+    <nav class="student-nav" aria-label="Student tools"><button class="active" type="button" data-student-view="events">Event Orders</button><button type="button" data-student-view="costing">Costing Lab</button></nav>
+    <div id="eventsView">
     <section class="hero">
       <div><p class="eyebrow">Student production desk</p><h1>Today&rsquo;s Event Order</h1><p>Open the current published packet, choose your generic team or station, and follow teacher direction. Names, individual roles, and assignments remain in Google Classroom.</p></div>
       <button id="refreshEventData" type="button">Refresh Event Data</button>
@@ -32,6 +34,16 @@
       <div id="eventList"></div>
     </section>
     <section id="emptyState" class="empty" hidden><h2>No Event Order is published.</h2><p>Use Google Classroom and your teacher&rsquo;s directions until a production packet is released.</p></section>
+    </div>
+
+    <section id="costingView" hidden>
+      <section class="hero costing-hero"><div><p class="eyebrow">Student costing lab</p><h1>Recipe &amp; Menu Costing</h1><p>Practice scaling, AP/EP yield, package purchasing, portion cost, food-cost percentage, and menu pricing with teacher-reviewed public estimates. Your work stays in this browser and is never sent to the teacher system.</p></div><button id="printCosting" type="button">Print Cost Sheet</button></section>
+      <section class="lab-grid">
+        <article class="lab-panel"><h2>1. Build the cost sheet</h2><label>Load a published recipe<select id="costRecipe"><option value="">Start with a blank cost sheet</option></select></label><div class="lab-fields"><label>Cost sheet title<input id="costTitle" value="Practice cost sheet"></label><label>Target yield / portions<input id="costYield" type="number" min="1" step="any" value="12"></label><label>Target food-cost %<input id="targetFoodCost" type="number" min="1" max="100" step="0.1" value="30"></label><label>Proposed menu price<input id="menuPrice" type="number" min="0" step="0.01"></label><label>Projected sales mix %<input id="salesMix" type="number" min="0" max="100" step="0.1"></label><label>Popularity benchmark %<input id="popularityBenchmark" type="number" min="0" max="100" step="0.1"></label><label>Contribution-margin benchmark<input id="marginBenchmark" type="number" min="0" step="0.01"></label></div><div id="costIngredients"></div><button id="addCostIngredient" class="secondary" type="button">Add ingredient</button></article>
+        <aside class="lab-panel summary-panel"><h2>2. Analyze</h2><div id="costMetrics"></div><p class="notice compact">Planning prices may differ from in-store prices. Check the date, store, package, and variable-weight notes before using the market order.</p></aside>
+      </section>
+      <article class="lab-panel"><h2>3. Market order</h2><div class="table-wrap"><table><thead><tr><th>Ingredient</th><th>AP quantity</th><th>Matched product</th><th>Packages</th><th>Purchase estimate</th><th>Price source</th></tr></thead><tbody id="marketOrder"></tbody></table></div></article>
+    </section>
   </main>
 
   <dialog id="recipeDialog"><button class="dialog-close" type="button" aria-label="Close">×</button><div id="recipeContent"></div></dialog>

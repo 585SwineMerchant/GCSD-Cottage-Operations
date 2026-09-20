@@ -11,7 +11,7 @@ It intentionally uses **two Apps Script projects**. Do not combine them.
 | `teacher/` | GCSD domain only | Requests, draft events, publishing, audit records, and document generation |
 | `public-feed/` | Anyone/anonymous | Return only the latest sanitized publication snapshot |
 
-The public project has no write functions and never reads Requests, Documents, or Audit. Contact information stays only in the restricted `Requests` sheet. Student names, email addresses, IDs, rosters, and individual roles are not part of this data model. Both projects must be newly created for version two; do not reuse an Apps Script project or deployment from another application.
+The public project has no write functions and never reads Requests, Documents, Audit, Receipts, budgets, or transactions. It reads only sanitized publication snapshots and allowlisted product/package price fields. Contact information stays only in the restricted `Requests` sheet. Student names, email addresses, IDs, rosters, and individual roles are not part of this data model. Both projects must be newly created for version two; do not reuse an Apps Script project or deployment from another application.
 
 ## 1. Create the district-owned resources
 
@@ -102,7 +102,7 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, request queue, guided event workflow, structured menu/task editors, publication controls, document and audit history, the versioned Recipe Library, private event costing and purchasing, the full production planner, private budget management, receipt-photo review, and operational closeout. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, funding accounts, transaction ledgers, receipts, supplier details, closeout actuals, and immutable cost snapshots remain teacher-only. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation; Recipe Studio import remains a later version-two stage.
+The protected application now includes the operations dashboard, request queue, guided event workflow, structured menu/task editors, publication controls, document and audit history, the versioned Recipe Library, event costing and purchasing, the full production planner, private budget management, receipt-photo review, and operational closeout. Ingredient aliases and compatible-unit conversion connect approved recipes to the price catalog. Funding accounts, transaction ledgers, receipt originals/OCR, event purchases, closeout actuals, and immutable event cost snapshots remain teacher-only; only allowlisted product/package planning prices are public for the student Costing Lab. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation; Recipe Studio import remains a later version-two stage.
 
 The receipt release adds `Receipts` and uses Google Drive OCR. In the teacher Apps Script project, add the **Drive API** under **Services** (identifier `Drive`, version `v3`), or copy the repository's `appsscript.json` manifest. Receipt capture still saves a private review draft if OCR is unavailable, but automated extraction requires the service.
 

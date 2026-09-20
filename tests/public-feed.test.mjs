@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import test from "node:test";
 
-async function feedContext(rows, itemRows = []) {
+async function feedContext(rows, itemRows = [], priceRows = []) {
   const source = await readFile(new URL("../apps-script/public-feed/Code.gs", import.meta.url), "utf8");
   const sheet = {
     getLastRow: () => rows.length + 1,
@@ -13,9 +13,13 @@ async function feedContext(rows, itemRows = []) {
     getLastRow: () => itemRows.length + 1,
     getRange: () => ({ getDisplayValues: () => itemRows.map(row => [...row]) })
   };
+  const priceSheet = {
+    getLastRow: () => priceRows.length + 1,
+    getRange: () => ({ getDisplayValues: () => priceRows.map(row => [...row]) })
+  };
   const context = vm.createContext({
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => "sheet_12345678901234567890", setProperty() {} }) },
-    SpreadsheetApp: { openById: () => ({ getSheetByName: name => name === "PublicationItems" ? itemSheet : sheet }) },
+    SpreadsheetApp: { openById: () => ({ getSheetByName: name => name === "PublicationItems" ? itemSheet : name === "IngredientPrices" ? priceSheet : sheet }) },
     ContentService: { MimeType: { TEXT: "text", JAVASCRIPT: "javascript", JSON: "json" }, createTextOutput: content => ({ content, setMimeType() { return this; } }) }
   });
   vm.runInContext(source, context, { filename: "public-feed/Code.gs" });
@@ -33,6 +37,19 @@ test("public feed returns the latest complete schema-two snapshot including an u
   assert.equal(snapshot.schemaVersion, 2);
   assert.equal(snapshot.action, "unpublish");
   assert.deepEqual(Array.from(snapshot.events), []);
+});
+
+test("public feed exposes only sanitized planning prices", async () => {
+  const snapshot = { schemaVersion: 2, revision: 1, publishedAt: "2026-09-20T12:00:00.000Z", events: [], yearArchive: [] };
+  const price = ["price-1", "all-purpose flour", "lb", "5 lb bag", "5", "2.49", "Wegmans", "sku-private", "private note", "TRUE", "2026-09-20T12:00:00.000Z", "teacher@greececsd.org", "Wegmans Flour", '["flour","ap flour"]', "lb", "receipt actual", "Culver Ridge", "2026-09-20", "https://www.wegmans.com/shop/categories/1", "reviewed receipt", "FALSE", "FALSE"];
+  const context = await feedContext([["pub-1", "evt-a", "1", snapshot.publishedAt, "teacher@greececsd.org", JSON.stringify(snapshot)]], [], [price]);
+  const result = context.latestSnapshot_();
+  assert.equal(result.priceCatalog.length, 1);
+  assert.equal(result.priceCatalog[0].productName, "Wegmans Flour");
+  const json = JSON.stringify(result.priceCatalog);
+  assert.equal(json.includes("private note"), false);
+  assert.equal(json.includes("teacher@greececsd.org"), false);
+  assert.equal(json.includes("sku-private"), false);
 });
 
 test("public feed fails closed when the newest snapshot is malformed", async () => {
