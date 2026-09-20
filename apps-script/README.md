@@ -4,14 +4,15 @@ This folder contains the first complete Google-backed workflow for GCSD Cottage 
 
 `Google Form request → protected teacher inbox → private Event Order draft → production plan → deliberate publication → read-only GitHub student view → Google operations documents`
 
-It intentionally uses **two Apps Script projects**. Do not combine them.
+It intentionally uses **three Apps Script projects**. Do not combine them.
 
 | Project | Deployment access | Responsibility |
 |---|---|---|
 | `teacher/` | GCSD domain only | Requests, draft events, publishing, audit records, and document generation |
 | `public-feed/` | Anyone/anonymous | Return only the latest sanitized publication snapshot |
+| `recipe-import/` | Anyone/anonymous | Fetch one public HTTPS recipe page and return only structured Recipe JSON-LD fields |
 
-The public project has no write functions and never reads Requests, Documents, Audit, Receipts, budgets, or transactions. It reads only sanitized publication snapshots and allowlisted product/package price fields. Contact information stays only in the restricted `Requests` sheet. Student names, email addresses, IDs, rosters, and individual roles are not part of this data model. Both projects must be newly created for version two; do not reuse an Apps Script project or deployment from another application.
+The public-feed project has no write functions and never reads Requests, Documents, Audit, Receipts, budgets, or transactions. It reads only sanitized publication snapshots and allowlisted product/package price fields. The recipe-import project has no Google data access at all; it fetches public HTTPS pages and returns only structured recipe fields. Contact information stays only in the restricted `Requests` sheet. Student names, email addresses, IDs, rosters, and individual roles are not part of this data model. All three projects must be newly created for version two; do not reuse an Apps Script project or deployment from another application.
 
 ## 1. Create the district-owned resources
 
@@ -73,14 +74,26 @@ This is the GCSD policy gate identified during planning. If the anonymous option
 
 The endpoint returns JSON by default and JSONP when passed a valid `callback` query parameter. The GitHub page uses JSONP because the response is deliberately public, read-only, and contains only the sanitized snapshot.
 
-## 4. Connect GitHub Pages
+## 4. Create the recipe-import project
+
+Create a third standalone Apps Script project named `GCSD Cottage Operations - Recipe Import`. Replace its default `Code.gs` with `recipe-import/Code.gs`. It requires no workbook ID, Drive folder, API key, advanced service, or configuration function.
+
+Deploy it as a web app:
+
+- Execute as: **User deploying the web app**
+- Who has access: **Anyone**
+
+Approve the external-request permission. This service receives a public recipe URL, fetches that page, and returns only standardized recipe fields. It does not store the URL, student work, or imported recipe and cannot access the operational workbook.
+
+## 5. Connect GitHub Pages
 
 Edit `site/config.js`:
 
 ```javascript
 window.GCSD_CONFIG = Object.freeze({
   publicFeedUrl: "PUBLIC_FEED_EXEC_URL",
-  teacherCommandCenterUrl: "TEACHER_COMMAND_CENTER_EXEC_URL"
+  teacherCommandCenterUrl: "TEACHER_COMMAND_CENTER_EXEC_URL",
+  recipeImportUrl: "RECIPE_IMPORT_EXEC_URL"
 });
 ```
 
@@ -88,7 +101,7 @@ Use each deployment's `/exec` URL, not its `/dev` testing URL.
 
 The student page performs one request when opened. It does not poll. **Refresh Event Data** performs one additional request. If refresh fails, the browser keeps displaying the last successfully loaded snapshot and identifies it as a saved copy.
 
-## 5. Prove the complete slice
+## 6. Prove the complete slice
 
 1. Submit a request through the generated Form.
 2. Open the protected Teacher Command Center.
@@ -135,6 +148,6 @@ The migration accepts the existing managed headers as an exact prefix, appends m
 
 Editing the master recipe later does not alter the event attachment. Approve the revision and use **Attach or refresh approved version** when an event should deliberately adopt it.
 
-The public Recipe Studio stores work only in the student's browser. Students may paste copied recipe text or read a clear screenshot locally, then correct the proposed structured fields. **Copy teacher-review export** or **Download JSON** produces a structured draft without student identity. In the protected Command Center, open **Recipes → Import a Recipe Studio draft**, paste the JSON, and load it into a new unsaved teacher draft. Review, correct, save, and approve it through the same workflow as any other recipe.
+The public Recipe Studio stores work only in the student's browser. Its preferred input is a public recipe webpage URL. Create a third standalone Apps Script project named `GCSD Cottage Operations - Recipe Import`, copy `recipe-import/Code.gs`, and deploy it as **Execute as me / Anyone**. This project requires no configuration function, workbook ID, Drive folder, advanced service, or API key. Put its `/exec` URL in `site/config.js`. It returns standardized recipe data but never stores a submission or accesses GCSD records. Students may use copied text or local screenshot OCR when a site has no structured recipe data. **Copy teacher-review export** or **Download JSON** produces a structured draft without student identity. In the protected Command Center, open **Recipes → Import a Recipe Studio draft**, paste the JSON, and load it into a new unsaved teacher draft. Review, correct, save, and approve it through the same workflow as any other recipe.
 
 For a click-by-click protected-account session, use [`../docs/weekend-google-setup.md`](../docs/weekend-google-setup.md).
