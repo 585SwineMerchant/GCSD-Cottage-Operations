@@ -34,8 +34,12 @@
     return Object.keys(headings).find(key => headings[key].test(candidate)) || "";
   }
 
+  function withoutOcrCheckbox(value) {
+    return cleanLine(value).replace(/^(?:[oO0dD]\s*)+(?=\d|[¼½¾⅓⅔⅛⅜⅝⅞])/i, "");
+  }
+
   function ingredientFromLine(value) {
-    let line = cleanLine(value).replace(/^[•*·▪◦‣-]\s*/, "");
+    let line = withoutOcrCheckbox(value).replace(/^[•*·▪◦‣-]\s*/, "");
     if (!line || headingFor(line)) return null;
     const quantityMatch = line.match(/^(?:(?:about|approximately|approx\.?|~)\s*)?(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?\s*[¼½¾⅓⅔⅛⅜⅝⅞]?|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\s+|$)/i);
     let quantity = 0, quantityText = "", unit = "";
@@ -65,6 +69,40 @@
     return [item.name, amount, item.unit, item.preparation].join(" | ");
   }
 
+  function titleFromLines(lines) {
+    const candidates = lines.map((line, index) => ({ line, index })).filter(({ line }) => {
+      if (headingFor(line) || /^https?:\/\//i.test(line) || /^by\b/i.test(line)) return false;
+      if (/\b(?:yield|serves?|servings?|makes|prep|cook|total|minutes?|mins?|hours?|votes?|rating|reviews?)\b/i.test(line)) return false;
+      if (ingredientFromLine(line) || line.length > 90) return false;
+      return /^(?:[A-Z][A-Za-z'’&-]*)(?:\s+(?:[A-Z][A-Za-z'’&-]*|and|of|with|for|the)){0,10}$/.test(line);
+    });
+    if (!candidates.length) return "";
+    const first = candidates[0], next = candidates.find(candidate => candidate.index === first.index + 1);
+    return next && `${first.line} ${next.line}`.length <= 100 ? `${first.line} ${next.line}` : first.line;
+  }
+
+  function hasProcedureMarker(line) {
+    return /^(?:step\s*)?(?:[([]?\d{1,2}[\])}.:]?|[①-⑳]|[©@])\s+/i.test(cleanLine(line));
+  }
+
+  function stripProcedureMarker(line) {
+    return cleanLine(line).replace(/^(?:step\s*)?(?:[([]?\d{1,2}[\])}.:]?|[①-⑳]|[©@])\s*/i, "");
+  }
+
+  function procedureLines(lines) {
+    if (!lines.some(hasProcedureMarker)) return lines.map(stripProcedureMarker).filter(Boolean);
+    const steps = [];
+    let current = "";
+    lines.forEach(line => {
+      if (hasProcedureMarker(line)) {
+        if (current) steps.push(current);
+        current = stripProcedureMarker(line);
+      } else if (current) current = `${current} ${cleanLine(line)}`;
+    });
+    if (current) steps.push(current);
+    return steps.filter(Boolean);
+  }
+
   function parseRecipeText(value) {
     const raw = String(value || "").replace(/\r/g, "");
     const lines = raw.split(/\n+/).map(cleanLine).filter(Boolean);
@@ -74,7 +112,8 @@
       const heading = headingFor(line);
       if (heading) { current = heading; sawHeading = true; return; }
       if (/^(?:notes?|nutrition(?: facts)?|reviews?|related recipes?|storage|tips?)\s*:?$/i.test(line)) { current = ""; return; }
-      if (current && !/^https?:\/\//i.test(line) && !/\b(?:yield|serves?|servings?|makes|prep time|cook time|total time)\b/i.test(line)) sections[current].push(line);
+      const isRecipeMeta = /^(?:yield|servings?|makes|prep time|cook time|total time)\b/i.test(line) || /^serves?\s*:?\s*\d+/i.test(line);
+      if (current && !/^https?:\/\//i.test(line) && !isRecipeMeta) sections[current].push(line);
     });
     if (!sawHeading) {
       lines.forEach(line => {
@@ -83,10 +122,10 @@
       });
     }
     const ingredients = sections.ingredients.map(ingredientFromLine).filter(Boolean);
-    const procedures = sections.procedure.map(line => line.replace(/^(?:step\s*)?\d+[.)]\s*/i, "").trim()).filter(Boolean);
+    const procedures = procedureLines(sections.procedure);
     const yieldLine = lines.find(line => /\b(?:yield|serves?|servings?|makes)\b/i.test(line)) || "";
     const yieldMatch = yieldLine.match(/\b(?:yield|serves?|servings?|makes)\s*:?\s*(\d+(?:\.\d+)?)\s*([a-z][a-z -]*)?/i);
-    const title = lines.find(line => !headingFor(line) && !/^https?:\/\//i.test(line) && !/\b(?:yield|serves?|servings?|makes|prep time|cook time|total time)\b/i.test(line) && !ingredientFromLine(line) && line.length <= 160) || "";
+    const title = titleFromLines(lines) || lines.find(line => !headingFor(line) && !/^https?:\/\//i.test(line) && !/\b(?:yield|serves?|servings?|makes|prep time|cook time|total time)\b/i.test(line) && !ingredientFromLine(line) && line.length <= 160) || "";
     const urls = [...new Set((raw.match(/https?:\/\/[^\s]+/gi) || []).map(url => url.replace(/[),.;]+$/, "")))];
     const warnings = [];
     if (!title) warnings.push("Recipe title was not detected.");
