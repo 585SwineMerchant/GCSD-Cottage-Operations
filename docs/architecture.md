@@ -34,7 +34,7 @@ The operational workbook also contains recipe, publication, and private purchasi
 6. **Publish to students** creates an immutable sanitized snapshot with a revision and timestamp.
 7. The public-feed project reads only the latest publication snapshot.
 8. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
-9. The teacher application generates operational Google documents into the configured GCSD Drive folder.
+9. The teacher application generates Event Orders and Kitchen Management Plans into the configured GCSD Drive folder.
 
 ## Event state model
 
@@ -82,4 +82,8 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, and event purchasing are complete in source. Later phases will add the full production planner, Kitchen Management documents, broader budgets and inventory, operational closeout, and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, and Kitchen Management documents are complete in source. Later phases will add broader budgets and inventory, operational closeout, and Recipe Studio export/import.
+
+## Production planning contract
+
+Production tasks remain embedded in each Event record as structured JSON, so this release requires no workbook migration. Stable task IDs support dependency links and status updates. Publication validation blocks missing dependencies, dependency cycles, shared-equipment time conflicts, and tasks marked `Blocked`; missing schedule details remain warnings for backward compatibility. A task-status change to an already published event creates a `Revised draft` and does not alter the current student snapshot until the teacher republishes.

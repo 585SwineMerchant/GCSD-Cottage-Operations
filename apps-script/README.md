@@ -2,7 +2,7 @@
 
 This folder contains the first complete Google-backed workflow for GCSD Cottage Operations:
 
-`Google Form request → protected teacher inbox → private Event Order draft → deliberate publication → read-only GitHub student view → Google Event Order document`
+`Google Form request → protected teacher inbox → private Event Order draft → production plan → deliberate publication → read-only GitHub student view → Google operations documents`
 
 It intentionally uses **two Apps Script projects**. Do not combine them.
 
@@ -102,7 +102,9 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, request queue, event workspaces, publication controls, document and audit history, the versioned Recipe Library, and private event costing and purchasing. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, on-hand quantities, supplier details, status, and immutable cost snapshots remain teacher-only. The full production planner, broader budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
+The protected application now includes the operations dashboard, request queue, event workspaces, publication controls, document and audit history, the versioned Recipe Library, private event costing and purchasing, and the full production planner. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, on-hand quantities, supplier details, status, and immutable cost snapshots remain teacher-only. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Broader budgets/inventory, closeout reporting, and Recipe Studio import remain later version-two stages.
+
+The production-planner release does not add workbook tabs or columns. Replace `teacher/Code.gs` and `teacher/Index.html`, then create a new version of the existing protected teacher deployment. Do not rerun `initializeWorkbook()` solely for this release.
 
 After installing the costing and purchasing release, run `initializeWorkbook()` once. It adds `IngredientPrices`, `EventPurchases`, and `CostSnapshots` without changing existing rows.
 

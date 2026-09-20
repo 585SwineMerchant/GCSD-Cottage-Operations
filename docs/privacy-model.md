@@ -30,6 +30,8 @@ Published recipe data uses the same allowlist approach. Supplier prices, purchas
 
 Ingredient price records, suppliers, SKUs, on-hand counts, package estimates, purchase statuses, notes, and immutable cost snapshots are private operational data. They may appear in the protected Teacher Command Center and generated private Event Order, but the public sanitizer has no fields through which to publish them.
 
+Production task schedules, generic team labels, stations, instructions, dependencies, equipment, quality controls, handoffs, and task status may be published because they direct event-level kitchen work. Student names, IDs, email addresses, rosters, individual assignments, performance notes, attendance, and grades are never fields in the production-plan contract. Kitchen Management Plans are generated in the protected GCSD Drive folder and are not served by the public feed.
+
 ## Public request intake
 
 The published request Form may be opened by anyone with its link without a Google login. That permission applies only to submitting a response. Form editing, response records, contact information, private review notes, operational Events, audit history, and generated documents remain restricted to authorized GCSD users. The Form asks for contact information directly because no Google identity is required.

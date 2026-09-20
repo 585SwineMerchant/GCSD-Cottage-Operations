@@ -207,6 +207,7 @@ function getEventWorkspace(eventId) {
     approvedRecipes: recipeSummaries_().filter(item => item.status === "Approved"),
     ingredientPrices: activeIngredientPrices_(),
     costing: eventCosting_(eventId),
+    productionPlan: analyzeProductionPlan_(event),
     publications,
     audit: records_(SHEETS.AUDIT)
       .filter(item => String(item.record_id) === String(eventId) || String(parseJson_(item.detail_json, {}).eventId || "") === String(eventId))
@@ -772,9 +773,10 @@ function generateEventDocument(eventId) {
   body.appendParagraph("Menu").setHeading(DocumentApp.ParagraphHeading.HEADING1);
   parseJson_(event.menu_json, []).forEach(item => body.appendListItem(`${item.name}${item.required ? ` · ${item.required}` : ""}`));
   body.appendParagraph("Production assignments").setHeading(DocumentApp.ParagraphHeading.HEADING1);
-  parseJson_(event.tasks_json, []).forEach(task => {
+  normalizeTasks_(parseJson_(event.tasks_json, [])).forEach(task => {
     body.appendParagraph(`${task.teamLabel || "Team"} · ${task.station || "Station pending"} · ${task.name}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
-    body.appendParagraph([task.quantity, task.deadline, task.instructions].filter(Boolean).join(" · "));
+    body.appendParagraph([task.phase, task.startTime && `Start ${task.startTime}`, task.deadline && `Due ${task.deadline}`, task.durationMinutes && `${task.durationMinutes} minutes`, task.quantity, task.status, task.instructions].filter(Boolean).join(" · "));
+    if (task.dependsOn.length) body.appendParagraph(`Depends on: ${task.dependsOn.join(", ")}`);
     if (task.equipment && task.equipment.length) body.appendParagraph(`Equipment: ${task.equipment.join(", ")}`);
     if (task.qualityControls && task.qualityControls.length) body.appendParagraph(`Quality controls: ${task.qualityControls.join(" · ")}`);
     if (task.handoff) body.appendParagraph(`Handoff: ${task.handoff}`);
@@ -821,6 +823,72 @@ function generateEventDocument(eventId) {
   return record;
 }
 
+function generateKitchenManagementDocument(eventId) {
+  const teacher = assertTeacher_();
+  const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+  if (!event) throw new Error("Event not found.");
+  if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before generating documents.");
+  const plan = analyzeProductionPlan_(event);
+  const tasks = plan.tasks.slice().sort((a, b) => {
+    const aTime = timeMinutes_(a.startTime), bTime = timeMinutes_(b.startTime);
+    return (aTime < 0 ? 9999 : aTime) - (bTime < 0 ? 9999 : bTime) || a.id.localeCompare(b.id);
+  });
+  const doc = DocumentApp.create(`${event.event_name} · Kitchen Management Plan`);
+  const body = doc.getBody();
+  body.appendParagraph("GCSD CULINARY PATHWAY").setHeading(DocumentApp.ParagraphHeading.SUBTITLE);
+  body.appendParagraph(event.event_name).setHeading(DocumentApp.ParagraphHeading.TITLE);
+  body.appendParagraph(`Kitchen Management Plan · ${event.service_date || "Date pending"} · ${event.service_time || "Time pending"}`);
+  body.appendTable([
+    ["Location", event.location || event.school || "Pending"],
+    ["Service format", event.service_format || "Pending"],
+    ["Guests / orders", String(event.guest_count || 0)],
+    ["Plan readiness", plan.ready ? "Ready" : "Needs review"]
+  ]);
+  if (plan.issues.length || plan.warnings.length) {
+    body.appendParagraph("Readiness review").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    plan.issues.forEach(value => body.appendListItem(`REQUIRED: ${value}`));
+    plan.warnings.forEach(value => body.appendListItem(`REVIEW: ${value}`));
+  }
+  body.appendParagraph("Production timeline").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  tasks.forEach(task => {
+    body.appendParagraph(`${task.startTime || "Time pending"} · ${task.id} · ${task.name}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    body.appendParagraph([task.phase, task.teamLabel, task.station, task.durationMinutes && `${task.durationMinutes} minutes`, task.deadline && `Due ${task.deadline}`, task.status].filter(Boolean).join(" · "));
+    if (task.quantity) body.appendParagraph(`Production quantity: ${task.quantity}`);
+    if (task.dependsOn.length) body.appendParagraph(`Depends on: ${task.dependsOn.join(", ")}`);
+    if (task.instructions) body.appendParagraph(`Instructions: ${task.instructions}`);
+    if (task.equipment.length) body.appendParagraph(`Equipment: ${task.equipment.join(", ")}`);
+    if (task.qualityControls.length) body.appendParagraph(`Quality controls: ${task.qualityControls.join(" · ")}`);
+    if (task.handoff) body.appendParagraph(`Handoff: ${task.handoff}`);
+  });
+  doc.saveAndClose();
+  const folderId = PropertiesService.getScriptProperties().getProperty("DOCUMENT_FOLDER_ID");
+  const file = DriveApp.getFileById(doc.getId());
+  if (folderId) file.moveTo(DriveApp.getFolderById(folderId));
+  const record = { document_id: id_("doc"), event_id: eventId, document_type: "Kitchen Management Plan", file_id: doc.getId(), file_url: doc.getUrl(), created_at: new Date().toISOString(), created_by: teacher.email };
+  appendRecord_(SHEETS.DOCUMENTS, record);
+  audit_(teacher.email, "generate", "document", record.document_id, { eventId, fileId: record.file_id });
+  return record;
+}
+
+function updateProductionTaskStatus(eventId, taskId, status) {
+  const teacher = assertTeacher_();
+  const allowed = ["Not started", "Ready", "In progress", "Blocked", "Complete"];
+  if (!allowed.includes(status)) throw new Error("Choose a valid production task status.");
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
+    if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before changing task status.");
+    const tasks = normalizeTasks_(parseJson_(event.tasks_json, []));
+    const task = tasks.find(item => item.id === String(taskId));
+    if (!task) throw new Error("Production task not found.");
+    task.status = status;
+    updateRecord_(SHEETS.EVENTS, "event_id", eventId, { tasks_json: JSON.stringify(tasks) });
+    markEventOperationalChange_(event, teacher.email);
+    audit_(teacher.email, "update_status", "production_task", `${eventId}:${task.id}`, { status });
+    return task;
+  });
+}
+
 function sanitizePublicEvent_(event, eventRecipes) {
   const attachments = (Array.isArray(eventRecipes) ? eventRecipes : []).map(enrichEventRecipe_);
   const tasks = normalizeTasks_(parseJson_(event.tasks_json, event.tasks || []));
@@ -862,14 +930,58 @@ function normalizeTasks_(tasks) {
     id: clean_(task.id || `task-${index + 1}`, 100),
     teamLabel: clean_(task.teamLabel || task.team || "Team", 100),
     station: clean_(task.station, 100),
+    phase: clean_(task.phase || "Prep", 50),
     name: clean_(task.name || task.product, 300),
     quantity: clean_(task.quantity || task.detail, 200),
+    startTime: clean_(task.startTime || task.start_time, 40),
     deadline: clean_(task.deadline, 100),
+    durationMinutes: positiveInteger_(task.durationMinutes || task.duration_minutes, 0),
+    dependsOn: list_(task.dependsOn || task.depends_on, 30, 100),
+    status: clean_(task.status || "Not started", 50),
     instructions: clean_(task.instructions || task.studentDetails, 2000),
     equipment: list_(task.equipment, 30, 200),
     qualityControls: list_(task.qualityControls, 30, 300),
     handoff: clean_(task.handoff || task.dependency, 500)
   })).filter(task => task.name);
+}
+
+function analyzeProductionPlan_(event) {
+  const tasks = normalizeTasks_(parseJson_(event.tasks_json, []));
+  const issues = [];
+  const warnings = [];
+  const ids = new Set(tasks.map(task => task.id));
+  const duplicateIds = tasks.map(task => task.id).filter((id, index, all) => all.indexOf(id) !== index);
+  [...new Set(duplicateIds)].forEach(id => issues.push(`Duplicate task ID: ${id}`));
+  tasks.forEach(task => {
+    task.dependsOn.filter(id => !ids.has(id)).forEach(id => issues.push(`${task.id} depends on missing task ${id}`));
+    if (!task.startTime || !task.durationMinutes) warnings.push(`${task.id} needs a start time and duration for conflict checking`);
+    if (task.status === "Blocked") issues.push(`${task.id} is blocked`);
+  });
+  const visiting = new Set(), visited = new Set();
+  const byId = Object.fromEntries(tasks.map(task => [task.id, task]));
+  tasks.forEach(task => task.dependsOn.forEach(dependencyId => {
+    const dependency = byId[dependencyId], taskStart = timeMinutes_(task.startTime);
+    if (!dependency) return;
+    const dependencyStart = timeMinutes_(dependency.startTime);
+    if (taskStart >= 0 && dependencyStart >= 0 && dependency.durationMinutes && taskStart < dependencyStart + dependency.durationMinutes) {
+      issues.push(`${task.id} starts before ${dependencyId} is scheduled to finish`);
+    }
+  }));
+  function visit(id) {
+    if (visiting.has(id)) { issues.push(`Dependency cycle includes ${id}`); return; }
+    if (visited.has(id) || !byId[id]) return;
+    visiting.add(id); byId[id].dependsOn.forEach(visit); visiting.delete(id); visited.add(id);
+  }
+  tasks.forEach(task => visit(task.id));
+  const conflicts = [];
+  for (let i = 0; i < tasks.length; i += 1) for (let j = i + 1; j < tasks.length; j += 1) {
+    const a = tasks[i], b = tasks[j], aStart = timeMinutes_(a.startTime), bStart = timeMinutes_(b.startTime);
+    if (aStart < 0 || bStart < 0 || !a.durationMinutes || !b.durationMinutes) continue;
+    const shared = a.equipment.filter(item => b.equipment.some(other => other.toLowerCase() === item.toLowerCase()));
+    if (shared.length && aStart < bStart + b.durationMinutes && bStart < aStart + a.durationMinutes) conflicts.push({ taskA: a.id, taskB: b.id, equipment: shared });
+  }
+  conflicts.forEach(item => issues.push(`${item.taskA} and ${item.taskB} overlap on ${item.equipment.join(", ")}`));
+  return { tasks, issues: [...new Set(issues)], warnings: [...new Set(warnings)], conflicts, ready: tasks.length > 0 && issues.length === 0 && tasks.every(task => task.status !== "Blocked") };
 }
 
 function normalizeRecipeInput_(input) {
@@ -1072,6 +1184,9 @@ function validateEventForPublication_(event) {
   const tasks = normalizeTasks_(parseJson_(event.tasks_json, []));
   if (!menu.length) issue("missing_menu", "menu_text", "menu is empty");
   if (!tasks.length) issue("missing_tasks", "tasks_text", "production assignments are empty");
+  const plan = analyzeProductionPlan_(event);
+  plan.issues.forEach((message, index) => issue(`production_plan_${index + 1}`, "tasks_text", message));
+  plan.warnings.forEach((message, index) => warn(`production_plan_${index + 1}`, "tasks_text", message));
   if (!String(event.service_time || "").trim()) warn("missing_service_time", "service_time", "Service time has not been recorded.");
   if (!String(event.location || event.school || "").trim()) warn("missing_location", "location", "Service location has not been recorded.");
   if (!String(event.learning_focus || "").trim()) warn("missing_learning_focus", "learning_focus", "Learning focus has not been recorded.");
@@ -1246,6 +1361,7 @@ function positiveOrZero_(value) { const number = Number(value); return Number.is
 function boundedNumber_(value, min, max, fallback) { const number = Number(value); return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : Number(fallback || 0); }
 function roundQuantity_(value) { const number = Number(value); return Number.isFinite(number) ? Math.round(number * 1000) / 1000 : 0; }
 function roundMoney_(value) { const number = Number(value); return Number.isFinite(number) ? Math.round(number * 100) / 100 : 0; }
+function timeMinutes_(value) { const match = clean_(value, 40).match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i); if (!match) return -1; let hour = Number(match[1]), minute = Number(match[2]); if (minute > 59 || hour > (match[3] ? 12 : 23)) return -1; if (match[3]) { if (hour === 12) hour = 0; if (match[3].toUpperCase() === "PM") hour += 12; } return hour * 60 + minute; }
 function parseJson_(value, fallback) { try { return typeof value === "string" ? JSON.parse(value || "null") || fallback : (value || fallback); } catch (_) { return fallback; } }
 function list_(value, limit, max) { const items = Array.isArray(value) ? value : String(value || "").split(/\n|,/); return items.map(item => clean_(item, max)).filter(Boolean).slice(0, limit); }
 function menuFromText_(value) { return String(value || "").split(/\n|,/).map(name => ({ name: clean_(name, 300), required: 0 })).filter(item => item.name); }

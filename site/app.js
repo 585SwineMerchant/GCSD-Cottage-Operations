@@ -13,12 +13,22 @@
     return (Array.isArray(value) ? value : String(value || "").split(/\n|,/)).map(item => String(item || "").trim()).filter(Boolean);
   }
 
+  function timeValue(value) {
+    const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    if (!match) return 9999;
+    let hour = Number(match[1]);
+    if (match[3]) hour = (hour % 12) + (match[3].toUpperCase() === "PM" ? 12 : 0);
+    return hour * 60 + Number(match[2]);
+  }
+
   function taskHtml(task, eventId) {
     return `<article class="task">
-      <header><div><span>${esc(task.teamLabel || "Team")} · ${esc(task.station || "Station pending")}</span><h4>${esc(task.name)}</h4></div><strong>${esc(task.deadline || "Event deadline")}</strong></header>
+      <header><div><span>${esc(task.phase || "Production")} · ${esc(task.teamLabel || "Team")} · ${esc(task.station || "Station pending")}</span><h4>${esc(task.name)}</h4></div><strong>${esc(task.status || "Not started")}</strong></header>
       <p>${esc(task.instructions || "")}</p>
       <dl>
+        <div><dt>Schedule</dt><dd>${esc([task.startTime && `Start ${task.startTime}`, task.durationMinutes && `${task.durationMinutes} minutes`, task.deadline && `Due ${task.deadline}`].filter(Boolean).join(" · ") || "Teacher will confirm")}</dd></div>
         <div><dt>Quantity</dt><dd>${esc(task.quantity || "Teacher will confirm")}</dd></div>
+        <div><dt>Depends on</dt><dd>${esc(list(task.dependsOn).join(", ") || "No prerequisite task")}</dd></div>
         <div><dt>Equipment</dt><dd>${esc(list(task.equipment).join(", ") || "See teacher direction")}</dd></div>
         <div><dt>Quality controls</dt><dd>${esc(list(task.qualityControls).join(" · ") || "Meet the approved product standard")}</dd></div>
         <div><dt>Handoff</dt><dd>${esc(task.handoff || "No dependency recorded")}</dd></div>
@@ -32,7 +42,7 @@
     const tasks = (event.tasks || []).filter(task => teamFilter === "all" || String(task.teamLabel || "Team") === teamFilter).map(task => ({
       ...task,
       recipe: task.recipe || menu.find(item => String(item.name || "").toLowerCase() === String(task.name || "").toLowerCase())?.recipe
-    }));
+    })).sort((a, b) => timeValue(a.startTime) - timeValue(b.startTime) || String(a.name || "").localeCompare(String(b.name || "")));
     return `<article class="event">
       <header class="event-header"><div><span>Revision ${Number(event.version || snapshot.revision || 0)} · Published</span><h2>${esc(event.name)}</h2><p>${esc(event.clientDisplayName || "Private event")}</p></div><strong>${dateLabel(event.serviceDate)}<br>${esc(event.serviceTime || "Time pending")}</strong></header>
       <div class="brief">

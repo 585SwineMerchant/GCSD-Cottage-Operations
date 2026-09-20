@@ -497,3 +497,47 @@ test("qualitative ingredients remain visible but are excluded from automatic cos
   assert.equal(salt.status, "As needed");
   assert.equal(costing.unpricedCount, 1);
 });
+
+test("production planner detects missing dependencies, cycles, and equipment overlaps", async () => {
+  const context = await teacherContext();
+  const event = operationalEvent({ tasks_json: JSON.stringify([
+    { id: "prep", teamLabel: "Team A", station: "Kitchen 1", phase: "Prep", name: "Prep salsa", startTime: "9:00 AM", durationMinutes: 45, dependsOn: ["service"], equipment: ["Robot Coupe"], status: "Ready" },
+    { id: "service", teamLabel: "Team B", station: "Kitchen 2", phase: "Service", name: "Portion salsa", startTime: "9:30 AM", durationMinutes: 30, dependsOn: ["prep", "missing"], equipment: ["Robot Coupe"], status: "Blocked" }
+  ]) });
+  const analysis = context.analyzeProductionPlan_(event);
+  assert.equal(analysis.ready, false);
+  assert.ok(analysis.issues.some(issue => /missing task missing/.test(issue)));
+  assert.ok(analysis.issues.some(issue => /Dependency cycle/.test(issue)));
+  assert.ok(analysis.issues.some(issue => /overlap on Robot Coupe/.test(issue)));
+  assert.ok(analysis.issues.some(issue => /service is blocked/.test(issue)));
+  assert.ok(analysis.issues.some(issue => /service starts before prep is scheduled to finish/.test(issue)));
+});
+
+test("production task status changes preserve the published snapshot until republished", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-status", tasks_json: JSON.stringify([{ id: "prep", name: "Prep salsa", status: "Ready" }]), publication_status: "Published", stage: "Published", revision: 1 }));
+  const task = context.updateProductionTaskStatus("evt-status", "prep", "In progress");
+  const event = context.findRecord_("Events", "event_id", "evt-status");
+  assert.equal(task.status, "In progress");
+  assert.equal(event.publication_status, "Revised draft");
+  assert.equal(context.parseJson_(event.tasks_json, [])[0].status, "In progress");
+  assert.throws(() => context.updateProductionTaskStatus("evt-status", "prep", "Unknown"), /valid production task status/);
+});
+
+test("kitchen management plan and student-safe production timeline controls are present", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  context.appendRecord_("Events", operationalEvent({ event_id: "evt-kitchen", tasks_json: JSON.stringify([{ id: "prep", name: "Prep salsa", phase: "Prep", startTime: "9:00 AM", durationMinutes: 30, status: "Ready" }]) }));
+  const document = context.generateKitchenManagementDocument("evt-kitchen");
+  const teacher = await readFile(new URL("../apps-script/teacher/Index.html", import.meta.url), "utf8");
+  const student = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
+  assert.equal(document.document_type, "Kitchen Management Plan");
+  assert.match(teacher, /data-save-task-status/);
+  assert.match(teacher, /generateKitchenManagementDocument/);
+  assert.match(student, /Depends on/);
+  assert.match(student, /task\.status/);
+  assert.match(student, /task\.startTime/);
+});

@@ -66,4 +66,13 @@ Verify with one small test recipe: save draft → approve → attach to the exis
 3. Create a new version of the existing GCSD-restricted teacher deployment; keep its URL and permissions unchanged.
 4. Do not change the public-feed deployment. Costing and purchasing data is private and the public contract is unchanged.
 
+## Production planner update
+
+1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. Do not run a workbook migration; production-plan fields remain inside the existing `Events.tasks_json` value.
+3. Create a new version of the existing GCSD-restricted teacher deployment. Keep its URL and permissions unchanged.
+4. Do not change the public-feed deployment. It already transports the sanitized publication snapshot.
+5. Allow GitHub Pages to deploy the updated student timeline from `site/app.js`.
+6. Verify task readiness, a status change to `Revised draft`, generation of a Kitchen Management Plan, and republishing of the student timeline.
+
 Verify by saving one exact-unit ingredient price, building the test event purchase plan, recording an on-hand amount, and generating a new private Event Order. Confirm the student site remains unchanged.
