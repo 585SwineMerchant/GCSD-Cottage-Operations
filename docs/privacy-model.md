@@ -32,6 +32,8 @@ Ingredient price records, suppliers, SKUs, on-hand counts, package estimates, pu
 
 Funding accounts, allocations, payment methods, commitments, expenses, credits, available balances, event budget targets, storage locations, reorder levels, and inventory movement history are also private. They live only in protected workbook tabs and teacher responses. Editing a private event budget does not change the student publication state.
 
+Event closeout actuals, customer feedback, successes, issues, follow-up notes, cost variance, and staff identity are private operational records. Completing or editing a closeout does not revise, republish, or remove the student snapshot.
+
 Production task schedules, generic team labels, stations, instructions, dependencies, equipment, quality controls, handoffs, and task status may be published because they direct event-level kitchen work. Student names, IDs, email addresses, rosters, individual assignments, performance notes, attendance, and grades are never fields in the production-plan contract. Kitchen Management Plans are generated in the protected GCSD Drive folder and are not served by the public feed.
 
 ## Public request intake

@@ -579,6 +579,50 @@ test("private event budget changes do not revise the student publication", async
   assert.equal(JSON.stringify(publicEvent).includes(account.budget_account_id), false);
 });
 
+test("event closeout auto-summarizes operations and completes without changing publication", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const event = operationalEvent({
+    event_id: "evt-closeout", publication_status: "Published", stage: "Published", revision: 2,
+    event_budget: 250, tasks_json: JSON.stringify([
+      { id: "prep", name: "Prep", status: "Complete" },
+      { id: "service", name: "Service", status: "In progress" }
+    ])
+  });
+  context.appendRecord_("Events", event);
+  const account = context.saveBudgetAccount({ name: "Event account", allocated_amount: 1000 });
+  context.recordBudgetTransaction({ budget_account_id: account.budget_account_id, event_id: event.event_id, transaction_type: "Expense", amount: 120, status: "Posted" });
+  context.recordBudgetTransaction({ budget_account_id: account.budget_account_id, event_id: event.event_id, transaction_type: "Credit", amount: 20, status: "Posted" });
+
+  const automatic = context.getEventWorkspace(event.event_id).closeout;
+  assert.equal(automatic.actual_guest_count, 40);
+  assert.equal(automatic.actual_cost, 100);
+  assert.equal(automatic.summary.completedTaskCount, 1);
+  assert.equal(automatic.summary.taskCount, 2);
+  assert.throws(() => context.setEventLifecycle(event.event_id, "Completed"), /Closeout tab/);
+
+  const input = {
+    event_id: event.event_id, completed_on: "2026-10-10", outcome: "Completed with changes",
+    actual_guest_count: 38, actual_cost: 95, customer_feedback: "Client requested earlier delivery next time",
+    successes: "Cold holding plan worked", issues: "One delayed handoff", follow_up: "Adjust next production timeline"
+  };
+  const draft = context.saveEventCloseout({ ...input, actual_cost: 100 }, false);
+  assert.equal(draft.finalized_at, "");
+  assert.equal(draft.actual_cost_source, "Posted event transactions");
+  context.recordBudgetTransaction({ budget_account_id: account.budget_account_id, event_id: event.event_id, transaction_type: "Expense", amount: 5, status: "Posted" });
+  assert.equal(context.getEventWorkspace(event.event_id).closeout.actual_cost, 105);
+  assert.equal(context.findRecord_("Events", "event_id", event.event_id).lifecycle_status, "Planning");
+  const finalized = context.saveEventCloseout(input, true);
+  const completed = context.findRecord_("Events", "event_id", event.event_id);
+  assert.ok(finalized.finalized_at);
+  assert.equal(completed.lifecycle_status, "Completed");
+  assert.equal(completed.publication_status, "Published");
+  assert.equal(context.records_("EventCloseouts").length, 1);
+  const publicEvent = context.sanitizePublicEvent_(completed, []);
+  assert.equal(JSON.stringify(publicEvent).includes("earlier delivery"), false);
+});
+
 test("inventory remains dormant and does not add teacher admin work", async () => {
   const fake = fakeAppsScript();
   const context = await teacherContext(fake.globals);
@@ -610,6 +654,8 @@ test("budget controls are visible, inventory controls are dormant, and private d
   assert.match(teacher, /Budget management/);
   assert.match(teacher, /saveBudgetAccount/);
   assert.match(teacher, /data-inactive-feature="inventory" hidden/);
+  assert.match(teacher, /Private event closeout/);
+  assert.match(teacher, /saveEventCloseout/);
   assert.match(teacher, /Received/);
-  assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price/);
+  assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price|customer_feedback|actual_cost/);
 });

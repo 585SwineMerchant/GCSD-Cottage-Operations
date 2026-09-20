@@ -84,3 +84,11 @@ Verify by saving one exact-unit ingredient price, building the test event purcha
 3. Create a new version of the existing GCSD-restricted teacher deployment, keeping its URL and permissions unchanged.
 4. Do not update the public-feed deployment. Budget, inventory, supplier, and purchasing data remain outside its allowlisted payload.
 5. Verify one funding account, one commitment and expense, and an event budget comparison. Inventory controls are intentionally hidden and inventory records do not affect purchasing while the feature flag is off.
+
+## Operational closeout update
+
+1. Replace the teacher project's `Code.gs` and `Index.html` with the repository versions.
+2. Run `initializeWorkbook()` once. It creates the private `EventCloseouts` tab without changing existing event rows.
+3. Create a new version of the existing GCSD-restricted teacher deployment, keeping its URL and permissions unchanged.
+4. Do not update the public-feed deployment or GitHub Pages; the public contract is unchanged.
+5. Verify a closeout draft, linked posted-expense total, event completion, Completed-event filtering, and an unchanged student publication.

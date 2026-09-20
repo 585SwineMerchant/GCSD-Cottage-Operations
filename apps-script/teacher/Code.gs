@@ -13,6 +13,7 @@ const SHEETS = Object.freeze({
   COST_SNAPSHOTS: "CostSnapshots",
   BUDGET_ACCOUNTS: "BudgetAccounts",
   BUDGET_TRANSACTIONS: "BudgetTransactions",
+  EVENT_CLOSEOUTS: "EventCloseouts",
   INVENTORY_ITEMS: "InventoryItems",
   INVENTORY_TRANSACTIONS: "InventoryTransactions"
 });
@@ -41,6 +42,7 @@ const HEADERS = Object.freeze({
   CostSnapshots: ["cost_snapshot_id", "event_id", "created_at", "created_by", "estimated_total", "unpriced_count", "snapshot_json"],
   BudgetAccounts: ["budget_account_id", "name", "school", "course", "funding_source", "payment_method", "allocated_amount", "notes", "active", "updated_at", "updated_by"],
   BudgetTransactions: ["budget_transaction_id", "budget_account_id", "event_id", "transaction_type", "amount", "vendor", "category", "reference", "transaction_date", "status", "notes", "created_at", "created_by"],
+  EventCloseouts: ["closeout_id", "event_id", "completed_on", "outcome", "actual_guest_count", "actual_cost", "actual_cost_source", "customer_feedback", "successes", "issues", "follow_up", "finalized_at", "finalized_by", "created_at", "created_by", "updated_at", "updated_by"],
   InventoryItems: ["inventory_item_id", "ingredient_name", "inventory_unit", "opening_quantity", "reorder_level", "storage_location", "notes", "active", "updated_at", "updated_by"],
   InventoryTransactions: ["inventory_transaction_id", "inventory_item_id", "event_id", "transaction_type", "quantity", "unit_cost", "vendor", "source_id", "transaction_date", "notes", "created_at", "created_by"]
 });
@@ -223,6 +225,7 @@ function getEventWorkspace(eventId) {
     budgetAccounts: activeBudgetAccounts_(),
     costing: eventCosting_(eventId),
     productionPlan: analyzeProductionPlan_(event),
+    closeout: eventCloseout_(eventId),
     publications,
     audit: records_(SHEETS.AUDIT)
       .filter(item => String(item.record_id) === String(eventId) || String(parseJson_(item.detail_json, {}).eventId || "") === String(eventId))
@@ -837,6 +840,7 @@ function setEventLifecycle(eventId, lifecycleStatus) {
     const event = findRecord_(SHEETS.EVENTS, "event_id", eventId);
     if (!event) throw new Error("Event not found.");
     if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before changing its status.");
+    if (status === "Completed" && !finalizedCloseout_(eventId)) throw new Error("Complete this event from its Closeout tab so the operational record is preserved.");
     if (status === "Ready") {
       const issues = publicationIssues_(event);
       if (issues.length) throw new Error(`Cannot mark ready: ${issues.join("; ")}`);
@@ -850,6 +854,53 @@ function setEventLifecycle(eventId, lifecycleStatus) {
     });
     audit_(teacher.email, "lifecycle", "event", eventId, { lifecycleStatus: status });
     return enrichEvent_(findRecord_(SHEETS.EVENTS, "event_id", eventId));
+  });
+}
+
+function saveEventCloseout(input, finalize) {
+  const teacher = assertTeacher_();
+  if (!input || !input.event_id) throw new Error("event_id is required.");
+  return withLock_(() => {
+    const event = findRecord_(SHEETS.EVENTS, "event_id", input.event_id);
+    if (!event) throw new Error("Event not found.");
+    if (eventLifecycle_(event) === "Archived") throw new Error("Restore this event before saving its closeout.");
+    const outcomes = ["Completed as planned", "Completed with changes", "Cancelled"];
+    const outcome = clean_(input.outcome, 100) || "Completed as planned";
+    if (!outcomes.includes(outcome)) throw new Error("Choose a valid closeout outcome.");
+    const guestValue = Number(input.actual_guest_count);
+    if (!Number.isFinite(guestValue) || guestValue < 0) throw new Error("Actual guests / orders must be zero or greater.");
+    const completedOn = clean_(input.completed_on, 20) || clean_(event.service_date, 20) || new Date().toISOString().slice(0, 10);
+    const actualCostValue = Number(input.actual_cost);
+    if (!Number.isFinite(actualCostValue) || actualCostValue < 0) throw new Error("Actual cost must be zero or greater.");
+    const actualCost = roundMoney_(actualCostValue);
+    const linkedSpend = eventActualSpend_(event.event_id);
+    const existing = records_(SHEETS.EVENT_CLOSEOUTS).find(item => String(item.event_id) === String(event.event_id));
+    const now = new Date().toISOString();
+    const isFinal = Boolean(finalize) || Boolean(existing && existing.finalized_at);
+    const record = {
+      closeout_id: existing ? existing.closeout_id : id_("closeout"), event_id: event.event_id,
+      completed_on: completedOn, outcome, actual_guest_count: Math.round(guestValue), actual_cost: actualCost,
+      actual_cost_source: actualCost === linkedSpend ? "Posted event transactions" : "Teacher confirmed",
+      customer_feedback: clean_(input.customer_feedback, 4000), successes: clean_(input.successes, 4000),
+      issues: clean_(input.issues, 4000), follow_up: clean_(input.follow_up, 4000),
+      finalized_at: isFinal ? (existing && existing.finalized_at || now) : "",
+      finalized_by: isFinal ? (existing && existing.finalized_by || teacher.email) : "",
+      created_at: existing ? existing.created_at : now, created_by: existing ? existing.created_by : teacher.email,
+      updated_at: now, updated_by: teacher.email
+    };
+    if (existing) updateRecord_(SHEETS.EVENT_CLOSEOUTS, "closeout_id", record.closeout_id, record);
+    else appendRecord_(SHEETS.EVENT_CLOSEOUTS, record);
+    if (finalize) {
+      updateRecord_(SHEETS.EVENTS, "event_id", event.event_id, {
+        lifecycle_status: "Completed", stage: displayStage_("Completed", publicationStatus_(event)),
+        updated_at: now, updated_by: teacher.email
+      });
+    }
+    audit_(teacher.email, finalize ? "complete_event" : "save_closeout", "event", event.event_id, {
+      closeoutId: record.closeout_id, outcome, actualGuestCount: record.actual_guest_count,
+      actualCost, actualCostSource: record.actual_cost_source
+    });
+    return eventCloseout_(event.event_id);
   });
 }
 
@@ -1324,6 +1375,47 @@ function eventCosting_(eventId) {
   };
 }
 
+function eventActualSpend_(eventId) {
+  return roundMoney_(records_(SHEETS.BUDGET_TRANSACTIONS)
+    .filter(item => String(item.event_id) === String(eventId) && item.status === "Posted" && ["Expense", "Credit"].includes(item.transaction_type))
+    .reduce((sum, item) => sum + (item.transaction_type === "Credit" ? -positiveOrZero_(item.amount) : positiveOrZero_(item.amount)), 0));
+}
+
+function finalizedCloseout_(eventId) {
+  return records_(SHEETS.EVENT_CLOSEOUTS).find(item => String(item.event_id) === String(eventId) && Boolean(item.finalized_at)) || null;
+}
+
+function eventCloseout_(eventId) {
+  const event = findRecord_(SHEETS.EVENTS, "event_id", eventId) || {};
+  const costing = eventCosting_(eventId);
+  const linkedSpend = eventActualSpend_(eventId);
+  const existing = records_(SHEETS.EVENT_CLOSEOUTS).find(item => String(item.event_id) === String(eventId)) || null;
+  const tasks = normalizeTasks_(parseJson_(event.tasks_json, []));
+  const followsPostedSpend = existing && !existing.finalized_at && existing.actual_cost_source === "Posted event transactions";
+  const actualCost = existing && !followsPostedSpend && String(existing.actual_cost).trim() !== "" ? roundMoney_(positiveOrZero_(existing.actual_cost)) : linkedSpend;
+  const record = existing || {
+    closeout_id: "", event_id: eventId, completed_on: event.service_date || "", outcome: "Completed as planned",
+    actual_guest_count: positiveInteger_(event.guest_count, 0), actual_cost: actualCost,
+    actual_cost_source: "Posted event transactions",
+    customer_feedback: "", successes: "", issues: "", follow_up: "", finalized_at: "", finalized_by: ""
+  };
+  return Object.assign({}, record, {
+    actual_guest_count: Number(record.actual_guest_count || 0), actual_cost: actualCost,
+    summary: {
+      plannedGuestCount: positiveInteger_(event.guest_count, 0),
+      estimatedFoodCost: costing.estimatedFoodCost,
+      estimatedPurchaseTotal: costing.estimatedTotal,
+      eventBudget: costing.eventBudget,
+      linkedPostedSpend: linkedSpend,
+      actualCost,
+      budgetRemaining: costing.eventBudget ? roundMoney_(costing.eventBudget - actualCost) : 0,
+      taskCount: tasks.length,
+      completedTaskCount: tasks.filter(task => task.status === "Complete").length,
+      publicationStatus: publicationStatus_(event)
+    }
+  });
+}
+
 function activeBudgetAccounts_() {
   return records_(SHEETS.BUDGET_ACCOUNTS).filter(item => String(item.active || "TRUE").toUpperCase() !== "FALSE");
 }
@@ -1517,11 +1609,11 @@ function dashboardSummary_(events) {
     openRequests: requests.filter(item => !["Accepted", "Declined"].includes(item.status)).length,
     needsInformation: requests.filter(item => item.status === "Needs Information").length,
     upcoming: events.filter(item => {
-      if (item.lifecycle_status === "Archived" || !item.service_date) return false;
+      if (["Archived", "Completed"].includes(item.lifecycle_status) || !item.service_date) return false;
       const date = new Date(`${item.service_date}T00:00:00`);
       return !Number.isNaN(date.getTime()) && date >= today && date <= soon;
     }).length,
-    attention: events.filter(item => item.lifecycle_status !== "Archived" && item.publication_issues.length).length,
+    attention: events.filter(item => !["Archived", "Completed"].includes(item.lifecycle_status) && item.publication_issues.length).length,
     published: events.filter(item => item.publication_status === "Published").length,
     revised: events.filter(item => item.publication_status === "Revised draft").length,
     unpublished: events.filter(item => item.publication_status === "Unpublished").length,

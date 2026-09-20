@@ -25,6 +25,7 @@ The operational workbook also contains recipe, publication, and private purchasi
 | `CostSnapshots` | Append-only private estimates created whenever a purchase plan is refreshed |
 | `BudgetAccounts` | Funding registers for allocations, buildings, courses, sources, and payment methods |
 | `BudgetTransactions` | Audited commitments, expenses, and credits tied to accounts and optional events |
+| `EventCloseouts` | Private planned-versus-actual outcomes and reusable after-action notes |
 | `InventoryItems` | Ingredient or supply identity, opening stock, reorder point, and storage location |
 | `InventoryTransactions` | Append-only receipts, usage, waste, and adjustments tied to optional events |
 
@@ -39,6 +40,7 @@ The operational workbook also contains recipe, publication, and private purchasi
 7. The public-feed project reads only the latest publication snapshot.
 8. The student site loads that snapshot once when opened and again only when **Refresh Event Data** is pressed.
 9. The teacher application generates Event Orders and Kitchen Management Plans into the configured GCSD Drive folder.
+10. After service, a private closeout summarizes existing operational data; the teacher confirms actuals and completes the event.
 
 ## Event state model
 
@@ -59,7 +61,7 @@ The protected teacher application is organized into:
 
 - Dashboard metrics, upcoming events, and planning warnings
 - Request queue with explicit acceptance and decline review
-- Event workspaces for overview, source request, menu/production, documents, publication, and audit
+- Event workspaces for overview, source request, menu/production, costing, closeout, documents, publication, and audit
 - Structured publication blockers and warnings
 - Preview, publish/revise, unpublish, republish, clone, archive, and restore controls
 - Searchable Recipe Library with draft, approved, archived, and restored states
@@ -86,13 +88,17 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, and budget ledger are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Later phases will add operational closeout and Recipe Studio export/import.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, private costing, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Later phases will add receipt capture automation and Recipe Studio export/import.
 
 ## Budget and inventory contract
 
 Budget accounts distinguish allocated, committed, spent, credited, and available balances across payment methods. Commitments count only while `Active` and may be explicitly marked `Fulfilled` or `Released`; every status change is audited. Posted expenses increase spent funds and posted credits reduce them. Event budget targets and account assignments are private and do not create a revised student draft by themselves.
 
 When the inventory feature is enabled in a future release, quantity is reconstructed from each item's opening quantity plus its append-only movement history. Receipts add stock; usage and waste subtract stock; adjustments may add or subtract. While disabled, inventory records do not affect event purchase calculations and a `Received` purchase does not create an inventory movement.
+
+## Operational closeout contract
+
+Each event has at most one private `EventCloseouts` record. The closeout view preloads planned guests, production-task completion, estimated food and purchase costs, event budget, and posted expenses or credits already linked to the event. A teacher may save a draft or confirm the closeout and mark the operational lifecycle `Completed` in one action. Closeout edits are audited, remain private, and never change the current student publication.
 
 ## Production planning contract
 

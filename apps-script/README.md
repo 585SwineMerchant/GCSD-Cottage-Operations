@@ -102,11 +102,13 @@ The student page performs one request when opened. It does not poll. **Refresh E
 
 ## Current foundation
 
-The protected application now includes the operations dashboard, request queue, event workspaces, publication controls, document and audit history, the versioned Recipe Library, private event costing and purchasing, the full production planner, and private budget and inventory management. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, funding accounts, transaction ledgers, stock movements, supplier details, and immutable cost snapshots remain teacher-only. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Operational closeout reporting and Recipe Studio import remain later version-two stages.
+The protected application now includes the operations dashboard, request queue, event workspaces, publication controls, document and audit history, the versioned Recipe Library, private event costing and purchasing, the full production planner, private budget management, and operational closeout. Scaled ingredients aggregate into an event purchase plan; exact-unit package prices, funding accounts, transaction ledgers, supplier details, closeout actuals, and immutable cost snapshots remain teacher-only. Production tasks support phases, schedules, dependencies, equipment-conflict checks, readiness validation, and status updates. Inventory remains dormant pending automation; receipt capture and Recipe Studio import remain later version-two stages.
 
 The production-planner release does not add workbook tabs or columns. Replace `teacher/Code.gs` and `teacher/Index.html`, then create a new version of the existing protected teacher deployment. Do not rerun `initializeWorkbook()` solely for this release.
 
-The budget-and-inventory release adds `BudgetAccounts`, `BudgetTransactions`, `InventoryItems`, and `InventoryTransactions`, plus append-only `event_budget` and `budget_account_id` columns on `Events`. After replacing the teacher source, run `initializeWorkbook()` once before creating the new deployment version.
+The closeout release adds `EventCloseouts`. After replacing the teacher source, run `initializeWorkbook()` once before creating the new deployment version.
+
+The budget release added `BudgetAccounts`, `BudgetTransactions`, `InventoryItems`, and `InventoryTransactions`, plus append-only `event_budget` and `budget_account_id` columns on `Events`.
 
 After installing the costing and purchasing release, run `initializeWorkbook()` once. It adds `IngredientPrices`, `EventPurchases`, and `CostSnapshots` without changing existing rows.
 
@@ -118,7 +120,7 @@ After replacing the teacher project files, run this once before creating the new
 initializeWorkbook();
 ```
 
-The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the recipe, publication-item, ingredient-price, event-purchase, cost-snapshot, budget, and inventory tabs, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
+The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the recipe, publication-item, ingredient-price, event-purchase, cost-snapshot, budget, closeout, and dormant inventory tabs, and is safe to rerun. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
 
 ## Recipe Library workflow
 
