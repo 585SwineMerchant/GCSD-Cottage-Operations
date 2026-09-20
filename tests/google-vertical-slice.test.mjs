@@ -685,11 +685,15 @@ test("receipt OCR parsing supports Wegmans alternating item and price lines", as
   assert.equal(parsed.transactionDate, "2026-09-14");
   assert.equal(parsed.totalAmount, 30.41);
   assert.deepEqual(Array.from(parsed.lineItems, item => [item.ingredientName, item.lineTotal]), [
-    ["TOMATO RED PLUM", 6.53],
+    ["Roma tomatoes", 6.53],
     ["PEPPER JALAPENO", 1.25],
     ["CILANTRO BUNCH", 0.99],
     ["WB LEMON JUICE", 5]
   ]);
+  assert.equal(parsed.lineItems[0].matchedPriceId, "");
+  assert.equal(parsed.lineItems[0].packagePrice, 0);
+  assert.equal(parsed.lineItems[0].updateCatalog, false);
+  assert.match(parsed.lineItems[0].catalogLearningNote, /does not show weight or price per pound/);
 });
 
 test("starter catalog seeds independently and matches aliases with compatible units", async () => {
