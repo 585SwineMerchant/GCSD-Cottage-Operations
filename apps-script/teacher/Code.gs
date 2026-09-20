@@ -820,7 +820,10 @@ function parseReceiptText_(text) {
     const price = values.length ? values[values.length - 1] : followingPrice;
     const receiptName = clean_(line.replace(/(?:\$\s*)?\d{1,6}(?:,\d{3})*\.\d{2}\b/g, " ").replace(/\b\d{8,14}\b/g, " ").replace(/\s+[A-Z]$/i, "").replace(/\s+/g, " ").trim(), 200);
     if (!receiptName || receiptName.length < 2) return null;
-    const name = /\b(?:tomato red plum|red plum tomato|roma tomato)\b/i.test(receiptName) ? "Roma tomatoes" : receiptName;
+    let name = receiptName;
+    if (/\b(?:tomato red plum|red plum tomato|roma tomato)\b/i.test(receiptName)) name = "Roma tomatoes";
+    else if (/^cilantro\s+bunch$/i.test(receiptName)) name = "cilantro";
+    else if (/^(?:pepper\s+jalapeno|jalapeno\s+pepper)$/i.test(receiptName)) name = "jalapeno peppers";
     const matched = findExactCatalogByName_(name, catalog);
     const missingVariableWeight = /\b(?:roma|red plum)\s+tomato|tomato\s+red\s+plum\b/i.test(name);
     return {
@@ -835,7 +838,7 @@ function parseReceiptText_(text) {
         ? "Expense captured. The receipt does not show weight or price per pound, so catalog learning is skipped."
         : matched
           ? "Possible exact catalog match. Confirm the package count, size, unit, and package price before selecting Use for catalog."
-          : "Expense captured. No confident catalog match; the catalog will remain unchanged."
+          : "New ingredient candidate. To add it to the catalog, enter the quantity represented by this line, its unit and catalog price, then select Add as new catalog item. If the receipt does not provide enough information, leave it unchecked; the expense will still post."
     };
   }).filter(Boolean).slice(0, 100);
   if (!lineItems.length) warnings.push("Item-level prices were not confidently detected; add them during review if catalog learning is needed.");
