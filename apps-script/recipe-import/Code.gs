@@ -108,8 +108,9 @@ function recipeScore_(recipe) {
 }
 
 function normalizeRecipe_(recipe, url) {
-  const yieldValue = Array.isArray(recipe.recipeYield) ? recipe.recipeYield.find(value => /\d/.test(String(value))) || recipe.recipeYield[0] : recipe.recipeYield;
-  const author = Array.isArray(recipe.author) ? recipe.author.map(item => item && item.name || item).filter(Boolean).join(", ") : recipe.author && recipe.author.name || recipe.author || "";
+  const yields = Array.isArray(recipe.recipeYield) ? recipe.recipeYield : [recipe.recipeYield];
+  const yieldValue = yields.find(value => /\d.*[A-Za-z]|[A-Za-z].*\d/.test(String(value))) || yields.find(value => /\d/.test(String(value))) || yields[0];
+  const author = recipeAuthor_(recipe.author);
   return {
     name: cleanRecipeText_(recipe.name),
     category: cleanRecipeText_(Array.isArray(recipe.recipeCategory) ? recipe.recipeCategory.join(", ") : recipe.recipeCategory),
@@ -120,6 +121,13 @@ function normalizeRecipe_(recipe, url) {
     author: cleanRecipeText_(author),
     sourceUrl: url
   };
+}
+
+function recipeAuthor_(value) {
+  if (!value) return "";
+  if (Array.isArray(value)) return value.map(recipeAuthor_).filter(Boolean).join(", ");
+  if (typeof value === "string") return value;
+  return value && typeof value === "object" ? String(value.name || "") : "";
 }
 
 function flattenRecipeInstructions_(value) {
