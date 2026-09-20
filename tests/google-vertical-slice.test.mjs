@@ -657,6 +657,8 @@ test("budget controls are visible, inventory controls are dormant, and private d
   assert.match(teacher, /\[hidden\]\{display:none!important\}/);
   assert.match(teacher, /Private event closeout/);
   assert.match(teacher, /saveEventCloseout/);
+  assert.match(teacher, /q\("#saveCloseout"\)\.onclick=\(\)=>saveCloseout\(false\)/);
+  assert.doesNotMatch(teacher, /onclick="saveCloseout/);
   assert.match(teacher, /Received/);
   assert.doesNotMatch(student, /budget_account_id|allocated_amount|inventory_transaction_id|supplier|package_price|customer_feedback|actual_cost/);
 });
