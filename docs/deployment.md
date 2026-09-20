@@ -28,7 +28,7 @@ Use a consistent version-two prefix:
 9. Run `configurePublicFeed(...)` using the same new workbook ID.
 10. If GCSD permits anonymous Apps Script deployments, deploy the feed as **Anyone**. If it does not, stop and use the documented publication fallback; never expose the teacher project.
 11. Create the separate recipe-import Apps Script project from `apps-script/recipe-import/` and deploy it as **Anyone**.
-12. Put the three new `/exec` URLs in `site/config.js`.
+12. Put only the Public Feed and Recipe Import `/exec` URLs in `site/config.js`. Keep the Teacher Command Center URL in a staff-only bookmark.
 13. Enable GitHub Pages from this repository's workflow.
 14. Run the proof: request → accept → draft → publish → student load → recipe URL import → document.
 
