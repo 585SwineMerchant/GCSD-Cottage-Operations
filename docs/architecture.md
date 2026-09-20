@@ -90,7 +90,11 @@ The manual load-and-refresh model avoids automatic polling. A class opening the 
 
 ## Phase boundaries
 
-The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, Wegmans-first catalog, receipt-assisted price learning, Student Costing Lab, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow. Recipe Studio export/import remains a later phase.
+The infrastructure, privacy gate, Command Center foundation, Recipe Library, approved version pinning, event scaling, Wegmans-first catalog, receipt-assisted price learning, Student Costing Lab, local-only Recipe Studio export/teacher import, event purchasing, production planner, Kitchen Management documents, funding register, budget ledger, receipt capture, and operational closeout are complete in source. The inventory ledger is implemented but feature-disabled and hidden pending an automated capture workflow.
+
+## Recipe Studio transfer contract
+
+The anonymous public application never writes recipes to the workbook. Recipe Studio work remains in browser storage and exports a versioned `gcsd-cottage-recipe-draft` JSON document without a student name, account identifier, or submission record. The protected Teacher Command Center validates that export and opens it as an unsaved recipe draft. Importing cannot approve, publish, attach, or overwrite a recipe; a teacher must deliberately save and approve the new immutable version.
 
 ## Receipt automation contract
 
