@@ -92,12 +92,13 @@ Edit `site/config.js`:
 ```javascript
 window.GCSD_CONFIG = Object.freeze({
   publicFeedUrl: "PUBLIC_FEED_EXEC_URL",
-  teacherCommandCenterUrl: "TEACHER_COMMAND_CENTER_EXEC_URL",
   recipeImportUrl: "RECIPE_IMPORT_EXEC_URL"
 });
 ```
 
 Use each deployment's `/exec` URL, not its `/dev` testing URL.
+
+The protected Teacher Command Center URL is deliberately not stored in the public site configuration or displayed on the student page. Distribute it to authorized staff through a district-controlled bookmark or staff-only document.
 
 The student page performs one request when opened. It does not poll. **Refresh Event Data** performs one additional request. If refresh fails, the browser keeps displaying the last successfully loaded snapshot and identifies it as a saved copy.
 
