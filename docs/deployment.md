@@ -129,3 +129,5 @@ The starter prices are estimates captured on 2026-08-02, not a live Wegmans feed
 6. Confirm that importing alone creates no Recipe row. Save the draft deliberately, review its approval requirements, and approve only after teacher verification.
 
 The screenshot reader lazy-loads major-version-pinned Tesseract.js v5 assets from jsDelivr and processes the selected image in the browser. If district filtering blocks that CDN, the student sees an error and can use the copied-text reader without losing the local draft.
+
+Version 0.9.2 adds a recipe-only crop step before screenshot recognition and improves reconstruction of webpage checkboxes, multi-line titles, and wrapped directions. This is a GitHub Pages-only update; no Apps Script replacement or workbook initialization is required.
