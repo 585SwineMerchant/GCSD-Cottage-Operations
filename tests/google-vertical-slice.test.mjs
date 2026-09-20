@@ -678,6 +678,20 @@ test("receipt OCR parsing extracts review candidates without posting financial d
   assert.match(parsed.warnings.join(" "), /Item-level prices/);
 });
 
+test("receipt OCR parsing supports Wegmans alternating item and price lines", async () => {
+  const context = await teacherContext();
+  const parsed = context.parseReceiptText_(`WEGMANS\nTOMATO RED PLUM\n6.53 F\nPEPPER JALAPENO\n1.25 F\nCILANTRO BUNCH\n0.99 F\nWB LEMON JUICE\n5.00 F\nTAX\n0.00\n**** BALANCE\n30.41\nVISA PURCHASE\nCARD NUMBER ************1234\nCHANGE\n0.00\n09/14/26 04:29PM`);
+  assert.equal(parsed.vendor, "WEGMANS");
+  assert.equal(parsed.transactionDate, "2026-09-14");
+  assert.equal(parsed.totalAmount, 30.41);
+  assert.deepEqual(Array.from(parsed.lineItems, item => [item.ingredientName, item.lineTotal]), [
+    ["TOMATO RED PLUM", 6.53],
+    ["PEPPER JALAPENO", 1.25],
+    ["CILANTRO BUNCH", 0.99],
+    ["WB LEMON JUICE", 5]
+  ]);
+});
+
 test("starter catalog seeds independently and matches aliases with compatible units", async () => {
   const fake = fakeAppsScript();
   const context = await teacherContext(fake.globals);
