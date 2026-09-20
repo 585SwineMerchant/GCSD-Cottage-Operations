@@ -48,18 +48,25 @@
     <section id="studioView" hidden>
       <section class="hero costing-hero"><div><p class="eyebrow">Local student workspace</p><h1>Recipe Studio</h1><p>Build a standardized recipe draft, save it in this browser, and export it for teacher review. This page does not collect names, submit records, or write directly to the teacher system.</p></div></section>
       <article class="lab-panel">
-        <h2>1. Define the recipe</h2>
+        <h2>1. Find or bring in a recipe</h2>
+        <div class="research-tools"><label>What recipe are you looking for?<input id="studioSearchTerms" placeholder="professional salsa fresca recipe"></label><button id="studioGoogleSearch" class="secondary" type="button">Search Google</button></div>
+        <p class="notice compact">The easiest options are to copy the recipe text from a webpage or take a clear screenshot. Screenshot reading happens on this device; the image is not uploaded to GCSD.</p>
+        <div class="studio-intake" id="studioIntake"><label>Paste copied recipe text<textarea id="studioIntakeText" rows="10" placeholder="Paste the recipe title, yield, ingredients, and directions here."></textarea></label><button id="readStudioText" type="button">Read pasted recipe</button><div class="studio-divider">or</div><label>Choose a screenshot<input id="studioScreenshot" type="file" accept="image/png,image/jpeg,image/webp"></label><div class="studio-drop" id="studioDropZone" tabindex="0">Or click here and press Ctrl+V to paste a screenshot</div><button id="readStudioScreenshot" type="button">Read screenshot</button></div>
+        <p id="studioIntakeStatus" class="notice compact" aria-live="polite">Nothing has been read yet.</p><div id="studioWarnings" class="notice compact" hidden></div>
+      </article>
+      <article class="lab-panel">
+        <h2>2. Review the recipe details</h2>
         <div class="lab-fields"><label>Recipe title<input id="studioName"></label><label>Category<input id="studioCategory" placeholder="Soup, bakery, entrée"></label><label>Standard yield quantity<input id="studioYieldQuantity" type="number" min="0.001" step="any"></label><label>Yield unit<input id="studioYieldUnit" placeholder="portions, quarts, loaves"></label><label>Portion / package<input id="studioPortion" placeholder="8 fl oz, 1 muffin"></label><label>Allergens and controls<input id="studioAllergens"></label></div>
         <label>Learning focus / competencies<textarea id="studioCompetencies" rows="2"></textarea></label>
       </article>
       <article class="lab-panel">
-        <h2>2. Standardize production</h2>
+        <h2>3. Check production information</h2>
         <label>Ingredients · one per line: Ingredient | Numeric quantity or instruction | Unit | Preparation<textarea id="studioIngredients" rows="10" placeholder="Tomatoes | 10 | lb | diced&#10;Salt | to taste | |"></textarea></label>
         <div class="lab-fields"><label>Equipment · one per line<textarea id="studioEquipment" rows="6"></textarea></label><label>Procedure · one step per line<textarea id="studioProcedure" rows="10"></textarea></label><label>Safety controls<textarea id="studioSafety" rows="5"></textarea></label><label>Quality controls · one per line<textarea id="studioQuality" rows="5"></textarea></label></div>
         <label>Source, testing, or revision notes<textarea id="studioSourceNotes" rows="3" placeholder="Record the source and what changed during testing. Do not enter student names."></textarea></label>
       </article>
       <article class="lab-panel">
-        <h2>3. Save or export</h2><p id="studioStatus" class="notice compact" aria-live="polite">This draft stays only in this browser until you copy or download an export.</p>
+        <h2>4. Save or export</h2><p id="studioStatus" class="notice compact" aria-live="polite">This draft stays only in this browser until you copy or download an export.</p>
         <div class="actions"><button id="saveStudioDraft" type="button">Save on this device</button><button id="copyStudioExport" class="secondary" type="button">Copy teacher-review export</button><button id="downloadStudioExport" class="secondary" type="button">Download JSON</button><button id="clearStudioDraft" class="secondary" type="button">Clear draft</button></div>
       </article>
     </section>
@@ -70,6 +77,7 @@
   <footer><strong>GCSD Culinary Pathway</strong><span>Event Orders contain operational information only. Student records remain in Google Classroom.</span></footer>
 
   <script src="./config.js"></script>
+  <script src="./recipe-parser.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
