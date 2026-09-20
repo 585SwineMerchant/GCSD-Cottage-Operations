@@ -11,6 +11,7 @@ Use a consistent version-two prefix:
 - Operational workbook: `GCSD Cottage Operations - Data`
 - Teacher Apps Script project: `GCSD Cottage Operations - Teacher`
 - Public Apps Script project: `GCSD Cottage Operations - Public Feed`
+- Recipe import Apps Script project: `GCSD Cottage Operations - Recipe Import`
 - Request Form: `GCSD Culinary Event Request`
 - Generated-document subfolder: `Generated Event Documents`
 
@@ -26,9 +27,10 @@ Use a consistent version-two prefix:
 8. Create the separate public-feed Apps Script project from `apps-script/public-feed/`.
 9. Run `configurePublicFeed(...)` using the same new workbook ID.
 10. If GCSD permits anonymous Apps Script deployments, deploy the feed as **Anyone**. If it does not, stop and use the documented publication fallback; never expose the teacher project.
-11. Put the two new `/exec` URLs in `site/config.js`.
-12. Enable GitHub Pages from this repository's workflow.
-13. Run the proof: request → accept → draft → publish → student load → document.
+11. Create the separate recipe-import Apps Script project from `apps-script/recipe-import/` and deploy it as **Anyone**.
+12. Put the three new `/exec` URLs in `site/config.js`.
+13. Enable GitHub Pages from this repository's workflow.
+14. Run the proof: request → accept → draft → publish → student load → recipe URL import → document.
 
 Detailed Apps Script setup is in [`../apps-script/README.md`](../apps-script/README.md). The focused protected-account checklist is [`weekend-google-setup.md`](weekend-google-setup.md).
 
@@ -133,3 +135,13 @@ The screenshot reader lazy-loads major-version-pinned Tesseract.js v5 assets fro
 Version 0.9.2 adds a recipe-only crop step before screenshot recognition and improves reconstruction of webpage checkboxes, multi-line titles, and wrapped directions. This is a GitHub Pages-only update; no Apps Script replacement or workbook initialization is required.
 
 Version 0.9.3 accepts OCR noise after section headings, detects numbered cooking directions even when the heading is unreadable, and flags same-unit ingredient quantities that are implausibly larger than the stated yield. It deliberately warns rather than guessing a replacement quantity.
+
+## Recipe URL import update (v0.10.0)
+
+1. Create a new standalone Apps Script project named `GCSD Cottage Operations - Recipe Import`; do not add this code to the teacher or public-feed projects.
+2. Replace its default `Code.gs` with `apps-script/recipe-import/Code.gs`.
+3. Deploy it as a web app: **Execute as me** and **Who has access: Anyone**. Approve the external-request permission used to fetch public recipe pages.
+4. Copy its production `/exec` URL into `site/config.js` as `recipeImportUrl`.
+5. Deploy the updated `site/` files through the existing GitHub Pages workflow.
+6. Do not run `initializeWorkbook()` and do not update either existing Apps Script project; the import service has no GCSD data dependency.
+7. Verify with a recipe URL that publishes Schema.org Recipe JSON-LD. Confirm exact fractions, title, yield, ingredients, instructions, category, author, and source URL; then verify that a non-recipe page displays the copied-text fallback message.
