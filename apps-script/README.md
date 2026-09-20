@@ -135,6 +135,6 @@ The migration accepts the existing managed headers as an exact prefix, appends m
 
 Editing the master recipe later does not alter the event attachment. Approve the revision and use **Attach or refresh approved version** when an event should deliberately adopt it.
 
-The public Recipe Studio stores work only in the student's browser. **Copy teacher-review export** or **Download JSON** produces a structured draft without student identity. In the protected Command Center, open **Recipes → Import a Recipe Studio draft**, paste the JSON, and load it into a new unsaved teacher draft. Review, correct, save, and approve it through the same workflow as any other recipe.
+The public Recipe Studio stores work only in the student's browser. Students may paste copied recipe text or read a clear screenshot locally, then correct the proposed structured fields. **Copy teacher-review export** or **Download JSON** produces a structured draft without student identity. In the protected Command Center, open **Recipes → Import a Recipe Studio draft**, paste the JSON, and load it into a new unsaved teacher draft. Review, correct, save, and approve it through the same workflow as any other recipe.
 
 For a click-by-click protected-account session, use [`../docs/weekend-google-setup.md`](../docs/weekend-google-setup.md).
