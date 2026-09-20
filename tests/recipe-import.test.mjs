@@ -23,7 +23,7 @@ async function importContext(html, responseCode = 200) {
 test("recipe URL importer extracts exact JSON-LD recipe fields", async () => {
   const html = `<html><head><script type="application/ld+json">${JSON.stringify({
     "@context": "https://schema.org", "@type": "Recipe", name: "Best Homemade Alfredo Sauce",
-    recipeYield: "2 cups", recipeCategory: "Sauce", author: { "@type": "Person", name: "Nichole" },
+    recipeYield: ["2", "2 cups"], recipeCategory: "Sauce", author: [{ "@id": "author-reference" }, { "@type": "Person", name: "Nichole" }],
     recipeIngredient: ["1/2 cup butter", "1 1/2 cups heavy whipping cream", "2 teaspoons minced garlic"],
     recipeInstructions: [
       { "@type": "HowToStep", text: "Add the butter and cream to a skillet." },
