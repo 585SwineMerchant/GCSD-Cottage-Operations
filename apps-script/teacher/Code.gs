@@ -785,11 +785,23 @@ function parseReceiptText_(text) {
     }
   }
   const moneyValues = line => [...line.matchAll(/(?:\$\s*)?(\d{1,6}(?:,\d{3})*\.\d{2})\b/g)].map(match => Number(match[1].replace(/,/g, "")));
-  const totalLines = lines.filter(line => /\b(grand\s+total|amount\s+due|balance\s+due|total)\b/i.test(line) && !/\b(subtotal|taxable|total\s+savings)\b/i.test(line));
+  const standalonePrice = line => {
+    const match = String(line || "").match(/^\$?\s*(\d{1,6}(?:,\d{3})*\.\d{2})(?:\s+[A-Z])?$/i);
+    return match ? Number(match[1].replace(/,/g, "")) : 0;
+  };
+  const totalIndexes = lines.map((line, index) => ({ line, index })).filter(item =>
+    /\b(grand\s+total|amount\s+due|balance\s+due|total|balance)\b/i.test(item.line) &&
+    !/\b(subtotal|taxable|total\s+savings|change)\b/i.test(item.line)
+  );
   let totalAmount = 0;
-  for (const line of totalLines.reverse()) {
-    const values = moneyValues(line);
+  for (const item of totalIndexes.reverse()) {
+    const values = moneyValues(item.line);
     if (values.length) { totalAmount = values[values.length - 1]; break; }
+    for (let offset = 1; offset <= 2 && item.index + offset < lines.length; offset += 1) {
+      const nextValue = standalonePrice(lines[item.index + offset]);
+      if (nextValue) { totalAmount = nextValue; break; }
+    }
+    if (totalAmount) break;
   }
   if (!totalAmount) warnings.push("Total was not confidently detected.");
   if (!transactionDate) warnings.push("Transaction date was not confidently detected.");
@@ -799,16 +811,18 @@ function parseReceiptText_(text) {
   const referenceMatch = referenceLine.match(/\b(?:receipt|invoice|order|transaction)\s*(?:#|no\.?|number|id|:)\s*([a-z0-9-]+)/i);
   let catalog = [];
   try { catalog = activeIngredientPrices_(); } catch (_) { /* parser remains usable in tests and before workbook configuration */ }
+  const administrativeLine = line => /\b(subtotal|tax|total|savings|payment|change|balance|amount due|visa|mastercard|cash|debit|credit|card number|approval|authorization|purchase|cashier)\b/i.test(line);
   const lineItems = lines.map((line, index) => {
-    if (/\b(subtotal|tax|total|savings|payment|change|balance|amount due|visa|mastercard|cash|debit|credit)\b/i.test(line)) return null;
+    if (administrativeLine(line) || standalonePrice(line)) return null;
     const values = moneyValues(line);
-    if (!values.length || !/[a-z]/i.test(line)) return null;
-    const price = values[values.length - 1];
-    const name = clean_(line.replace(/(?:\$\s*)?\d{1,6}(?:,\d{3})*\.\d{2}\b/g, " ").replace(/\b\d{8,14}\b/g, " ").replace(/\s+/g, " ").trim(), 200);
+    const followingPrice = index + 1 < lines.length ? standalonePrice(lines[index + 1]) : 0;
+    if ((!values.length && !followingPrice) || !/[a-z]/i.test(line)) return null;
+    const price = values.length ? values[values.length - 1] : followingPrice;
+    const name = clean_(line.replace(/(?:\$\s*)?\d{1,6}(?:,\d{3})*\.\d{2}\b/g, " ").replace(/\b\d{8,14}\b/g, " ").replace(/\s+[A-Z]$/i, "").replace(/\s+/g, " ").trim(), 200);
     if (!name || name.length < 2) return null;
     const matched = findCatalogByName_(name, catalog);
     return {
-      id: `line-${index + 1}`, receiptText: line, ingredientName: matched ? matched.ingredient_name : name,
+      id: `line-${index + 1}`, receiptText: followingPrice && !values.length ? `${line} ${lines[index + 1]}` : line, ingredientName: matched ? matched.ingredient_name : name,
       productName: matched ? matched.product_name || matched.ingredient_name : name, packagesPurchased: 1,
       lineTotal: roundMoney_(price), packagePrice: roundMoney_(price),
       packageQuantity: matched ? positiveNumber_(matched.package_quantity, 0) : 0,
