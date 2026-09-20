@@ -686,14 +686,28 @@ test("receipt OCR parsing supports Wegmans alternating item and price lines", as
   assert.equal(parsed.totalAmount, 30.41);
   assert.deepEqual(Array.from(parsed.lineItems, item => [item.ingredientName, item.lineTotal]), [
     ["Roma tomatoes", 6.53],
-    ["PEPPER JALAPENO", 1.25],
-    ["CILANTRO BUNCH", 0.99],
+    ["jalapeno peppers", 1.25],
+    ["cilantro", 0.99],
     ["WB LEMON JUICE", 5]
   ]);
   assert.equal(parsed.lineItems[0].matchedPriceId, "");
   assert.equal(parsed.lineItems[0].packagePrice, 0);
   assert.equal(parsed.lineItems[0].updateCatalog, false);
   assert.match(parsed.lineItems[0].catalogLearningNote, /does not show weight or price per pound/);
+});
+
+test("receipt OCR distinguishes existing catalog suggestions from new ingredients", async () => {
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const parsed = context.parseReceiptText_(`WEGMANS\nPEPPER JALAPENO\n1.25 F\nCILANTRO BUNCH\n0.99 F\nTOTAL\n2.24`);
+  const jalapeno = parsed.lineItems.find(item => item.ingredientName === "jalapeno peppers");
+  const cilantro = parsed.lineItems.find(item => item.ingredientName === "cilantro");
+  assert.equal(jalapeno.matchedPriceId, "");
+  assert.match(jalapeno.catalogLearningNote, /add it to the catalog/i);
+  assert.equal(cilantro.matchedPriceId, "seed_weg-cilantro");
+  assert.equal(cilantro.productName, "Fresh Cilantro");
+  assert.equal(cilantro.updateCatalog, false);
 });
 
 test("starter catalog seeds independently and matches aliases with compatible units", async () => {
