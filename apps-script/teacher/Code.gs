@@ -305,6 +305,36 @@ function getRecipe(recipeId) {
   };
 }
 
+function previewRecipeStudioImport(payload) {
+  assertTeacher_();
+  const raw = typeof payload === "string" ? payload : JSON.stringify(payload || {});
+  if (!raw.trim()) throw new Error("Paste a Recipe Studio export first.");
+  if (raw.length > 100000) throw new Error("The Recipe Studio export is too large.");
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (_) { throw new Error("The Recipe Studio export is not valid JSON."); }
+  if (!parsed || parsed.schema !== "gcsd-cottage-recipe-draft" || Number(parsed.schemaVersion) !== 1 || !parsed.recipe) {
+    throw new Error("This is not a supported GCSD Cottage Operations Recipe Studio export.");
+  }
+  const source = parsed.recipe;
+  const normalized = normalizeRecipeInput_({
+    name: source.name, category: source.category,
+    standard_yield_quantity: source.standardYieldQuantity,
+    standard_yield_unit: source.standardYieldUnit, portion_size: source.portionSize,
+    allergens: source.allergens, competencies: source.competencies,
+    ingredients: source.ingredients, equipment: source.equipment, procedure: source.procedure,
+    safety_controls: source.safetyControls, quality_controls: source.qualityControls
+  });
+  const record = Object.assign({}, normalized, { recipe_id: "", status: "Draft", current_version: 0 });
+  const recipe = enrichRecipe_(record);
+  if (!recipe.name) throw new Error("The imported draft needs a recipe name.");
+  return {
+    recipe,
+    warnings: recipe.approval_issues,
+    exportedAt: clean_(parsed.exportedAt, 50),
+    sourceNote: clean_(source.sourceNotes, 1000)
+  };
+}
+
 function saveRecipe(input) {
   const teacher = assertTeacher_();
   if (!input) throw new Error("Recipe data is required.");
