@@ -118,3 +118,12 @@ This update includes the unreleased v0.7 workflow and OCR work. Install it as on
 Verify in this order: catalog count and stale labels → alias/unit match in an event purchase plan → receipt upload and review → post with one checked catalog update → confirm the catalog price/source date changed → open the public Costing Lab anonymously → load a published recipe → confirm scaling, AP/EP yield, portion cost, target menu price, market order, and menu-engineering result.
 
 The starter prices are estimates captured on 2026-08-02, not a live Wegmans feed. The application does not scrape Wegmans. Existing event cost snapshots remain frozen when catalog prices change.
+
+## Local Recipe Studio transfer update (v0.9.0)
+
+1. Replace the teacher project's `Code.gs` and `Index.html`, then deploy a new version of the existing GCSD-restricted teacher web app.
+2. Deploy the updated `site/index.html`, `site/app.js`, and `site/styles.css` through the existing GitHub Pages workflow.
+3. Do not rerun `initializeWorkbook()` and do not redeploy the public-feed Apps Script project; this release adds no workbook fields and no public-feed writes.
+4. On the public site, create a small Recipe Studio draft and choose **Copy teacher-review export**.
+5. In the Teacher Command Center, open **Recipes → Import a Recipe Studio draft**, paste the export, and confirm it opens as an unsaved draft.
+6. Confirm that importing alone creates no Recipe row. Save the draft deliberately, review its approval requirements, and approve only after teacher verification.
