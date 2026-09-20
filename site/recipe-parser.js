@@ -162,5 +162,14 @@
     };
   }
 
-  globalThis.GCSDRecipeParser = Object.freeze({ parseRecipeText, ingredientFromLine, quantityValue });
+  function parseRecipeData(value) {
+    const recipe = value || {};
+    const raw = [recipe.name, recipe.yield ? `Yield: ${recipe.yield}` : "", "Ingredients", ...(recipe.ingredients || []), "Instructions", ...(recipe.instructions || []), recipe.sourceUrl].filter(Boolean).join("\n");
+    const parsed = parseRecipeText(raw);
+    parsed.category = cleanLine(recipe.category || recipe.cuisine || "");
+    parsed.sourceNotes = [`Source: ${cleanLine(recipe.sourceUrl)}`, recipe.author ? `Author: ${cleanLine(recipe.author)}` : ""].filter(Boolean).join("\n");
+    return parsed;
+  }
+
+  globalThis.GCSDRecipeParser = Object.freeze({ parseRecipeText, parseRecipeData, ingredientFromLine, quantityValue });
 })();
