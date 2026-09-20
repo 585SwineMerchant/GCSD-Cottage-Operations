@@ -16,7 +16,7 @@
   </header>
 
   <main id="main">
-    <nav class="student-nav" aria-label="Student tools"><button class="active" type="button" data-student-view="events">Event Orders</button><button type="button" data-student-view="costing">Costing Lab</button></nav>
+    <nav class="student-nav" aria-label="Student tools"><button class="active" type="button" data-student-view="events">Event Orders</button><button type="button" data-student-view="costing">Costing Lab</button><button type="button" data-student-view="studio">Recipe Studio</button></nav>
     <div id="eventsView">
     <section class="hero">
       <div><p class="eyebrow">Student production desk</p><h1>Today&rsquo;s Event Order</h1><p>Open the current published packet, choose your generic team or station, and follow teacher direction. Names, individual roles, and assignments remain in Google Classroom.</p></div>
@@ -43,6 +43,25 @@
         <aside class="lab-panel summary-panel"><h2>2. Analyze</h2><div id="costMetrics"></div><p class="notice compact">Planning prices may differ from in-store prices. Check the date, store, package, and variable-weight notes before using the market order.</p></aside>
       </section>
       <article class="lab-panel"><h2>3. Market order</h2><div class="table-wrap"><table><thead><tr><th>Ingredient</th><th>AP quantity</th><th>Matched product</th><th>Packages</th><th>Purchase estimate</th><th>Price source</th></tr></thead><tbody id="marketOrder"></tbody></table></div></article>
+    </section>
+
+    <section id="studioView" hidden>
+      <section class="hero costing-hero"><div><p class="eyebrow">Local student workspace</p><h1>Recipe Studio</h1><p>Build a standardized recipe draft, save it in this browser, and export it for teacher review. This page does not collect names, submit records, or write directly to the teacher system.</p></div></section>
+      <article class="lab-panel">
+        <h2>1. Define the recipe</h2>
+        <div class="lab-fields"><label>Recipe title<input id="studioName"></label><label>Category<input id="studioCategory" placeholder="Soup, bakery, entrée"></label><label>Standard yield quantity<input id="studioYieldQuantity" type="number" min="0.001" step="any"></label><label>Yield unit<input id="studioYieldUnit" placeholder="portions, quarts, loaves"></label><label>Portion / package<input id="studioPortion" placeholder="8 fl oz, 1 muffin"></label><label>Allergens and controls<input id="studioAllergens"></label></div>
+        <label>Learning focus / competencies<textarea id="studioCompetencies" rows="2"></textarea></label>
+      </article>
+      <article class="lab-panel">
+        <h2>2. Standardize production</h2>
+        <label>Ingredients · one per line: Ingredient | Numeric quantity or instruction | Unit | Preparation<textarea id="studioIngredients" rows="10" placeholder="Tomatoes | 10 | lb | diced&#10;Salt | to taste | |"></textarea></label>
+        <div class="lab-fields"><label>Equipment · one per line<textarea id="studioEquipment" rows="6"></textarea></label><label>Procedure · one step per line<textarea id="studioProcedure" rows="10"></textarea></label><label>Safety controls<textarea id="studioSafety" rows="5"></textarea></label><label>Quality controls · one per line<textarea id="studioQuality" rows="5"></textarea></label></div>
+        <label>Source, testing, or revision notes<textarea id="studioSourceNotes" rows="3" placeholder="Record the source and what changed during testing. Do not enter student names."></textarea></label>
+      </article>
+      <article class="lab-panel">
+        <h2>3. Save or export</h2><p id="studioStatus" class="notice compact" aria-live="polite">This draft stays only in this browser until you copy or download an export.</p>
+        <div class="actions"><button id="saveStudioDraft" type="button">Save on this device</button><button id="copyStudioExport" class="secondary" type="button">Copy teacher-review export</button><button id="downloadStudioExport" class="secondary" type="button">Download JSON</button><button id="clearStudioDraft" class="secondary" type="button">Clear draft</button></div>
+      </article>
     </section>
   </main>
 
