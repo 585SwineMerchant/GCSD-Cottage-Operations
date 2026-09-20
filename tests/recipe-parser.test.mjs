@@ -88,3 +88,18 @@ Calories: 535kcal`);
   assert.match(result.procedureText, /Serve immediately\./);
   assert.match(result.warnings.join(" "), /larger than the 2 Cups yield/);
 });
+
+test("Recipe Studio parser preserves exact structured URL-import quantities", async () => {
+  const subject = await parser();
+  const result = subject.parseRecipeData({
+    name: "Best Homemade Alfredo Sauce", category: "Sauce", yield: "2 cups",
+    ingredients: ["1/2 cup butter", "1 1/2 cups heavy whipping cream", "2 teaspoons minced garlic"],
+    instructions: ["Add the butter and cream to a skillet.", "Whisk in the remaining ingredients."],
+    author: "Nichole", sourceUrl: "https://example.test/alfredo"
+  });
+  assert.equal(result.name, "Best Homemade Alfredo Sauce");
+  assert.equal(result.category, "Sauce");
+  assert.match(result.ingredientsText, /Heavy Whipping Cream \| 1\.5 \| cup/i);
+  assert.equal(result.procedureText.split("\n").length, 2);
+  assert.match(result.sourceNotes, /Nichole/);
+});
