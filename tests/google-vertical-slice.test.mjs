@@ -5,9 +5,11 @@ import test from "node:test";
 
 async function teacherContext(globals = {}) {
   const catalog = await readFile(new URL("../apps-script/teacher/Catalog.gs", import.meta.url), "utf8");
+  const pathwayRecipes = await readFile(new URL("../apps-script/teacher/PathwayRecipes.gs", import.meta.url), "utf8");
   const source = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
   const context = vm.createContext({ console, ...globals });
   vm.runInContext(catalog, context, { filename: "Catalog.gs" });
+  vm.runInContext(pathwayRecipes, context, { filename: "PathwayRecipes.gs" });
   vm.runInContext(source, context, { filename: "Code.gs" });
   return context;
 }
@@ -145,6 +147,27 @@ test("public and teacher interfaces use the Cottage brand and tab identity", asy
   assert.match(teacherHtml, /assets\/cottage-logo\.png/);
   assert.match(teacherCode, /setTitle\("The Cottage at Arcadia · Teacher Command Center"\)/);
   assert.match(teacherCode, /setFaviconUrl\("https:\/\/585swinemerchant\.github\.io\/GCSD-Cottage-Operations\/assets\/cottage-logo\.png"\)/);
+});
+
+test("legacy pathway recipes seed independently without importing Cloudflare records", async () => {
+  const teacherCode = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
+  const pathwayRecipes = await readFile(new URL("../apps-script/teacher/PathwayRecipes.gs", import.meta.url), "utf8");
+  assert.match(teacherCode, /seedStarterRecipeLibrary_/);
+  assert.equal([...pathwayRecipes.matchAll(/"id": "ca12-/g)].length, 37);
+  assert.match(pathwayRecipes, /function seedStarterRecipeLibrary_/);
+  assert.match(pathwayRecipes, /Migrated from the standalone GCSD-Advanced-Culinary pathway library/);
+  ["users", "app_state", "audit_log", "submittedByEmail"].forEach(privateField => {
+    assert.equal(pathwayRecipes.includes(privateField), false, `legacy recipe seed included ${privateField}`);
+  });
+
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  assert.equal(context.records_("Recipes").length, 37);
+  assert.equal(context.records_("RecipeVersions").length, 37);
+  assert.equal(context.recipeSummaries_().every(recipe => recipe.status === "Approved" && recipe.approval_issues.length === 0), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.seedStarterRecipeLibrary_())), { added: 0, skipped: 37, total: 37 });
+  assert.equal(context.records_("Recipes").length, 37);
 });
 
 test("publication validation requires the minimum operational event fields", async () => {
@@ -379,7 +402,7 @@ test("recipe drafts, approvals, and event attachments preserve immutable approve
   const publicationPointer = context.parseJson_(context.records_("Publications")[0].snapshot_json, {});
   assert.equal(publicationPointer.storage, "PublicationItems");
   assert.equal(publicationPointer.events.length, 0);
-  const immutableVersions = context.records_("RecipeVersions").map(row => row.snapshot_json);
+  const immutableVersions = context.records_("RecipeVersions").filter(row => row.recipe_id === draft.recipe_id).map(row => row.snapshot_json);
 
   const edited = context.saveRecipe({
     ...approved, ingredients: [{ name: "Tomatoes", quantity: 3, unit: "lb", preparation: "diced" }],
@@ -391,8 +414,8 @@ test("recipe drafts, approvals, and event attachments preserve immutable approve
   const pinned = context.eventRecipeRecords_("evt-recipe").map(context.enrichEventRecipe_)[0];
   assert.equal(Number(pinned.recipe_version), 2);
   assert.match(pinned.scaled_recipe.ingredients[0], /^8\.8 lb Tomatoes/);
-  assert.deepEqual(context.records_("RecipeVersions").slice(0, 2).map(row => row.snapshot_json), immutableVersions);
-  assert.throws(() => context.updateRecord_("RecipeVersions", "recipe_version_id", context.records_("RecipeVersions")[0].recipe_version_id, { status: "Changed" }), /append-only/);
+  assert.deepEqual(context.records_("RecipeVersions").filter(row => row.recipe_id === draft.recipe_id).slice(0, 2).map(row => row.snapshot_json), immutableVersions);
+  assert.throws(() => context.updateRecord_("RecipeVersions", "recipe_version_id", context.records_("RecipeVersions").find(row => row.recipe_id === draft.recipe_id).recipe_version_id, { status: "Changed" }), /append-only/);
 });
 
 test("approving a revised recipe and refreshing an attachment marks the event revised", async () => {

@@ -145,3 +145,13 @@ Version 0.9.3 accepts OCR noise after section headings, detects numbered cooking
 5. Deploy the updated `site/` files through the existing GitHub Pages workflow.
 6. Do not run `initializeWorkbook()` and do not update either existing Apps Script project; the import service has no GCSD data dependency.
 7. Verify with a recipe URL that publishes Schema.org Recipe JSON-LD. Confirm exact fractions, title, yield, ingredients, instructions, category, author, and source URL; then verify that a non-recipe page displays the copied-text fallback message.
+
+## Pathway starter recipe migration (v0.11.0)
+
+1. In the existing protected teacher Apps Script project, replace `Code.gs` and create a new script file named `PathwayRecipes.gs` from the repository version.
+2. Save both files, then run `initializeWorkbook()` once from the editor. The function adds any missing recipes from the 37-recipe pathway library and creates one immutable approved version for each. It does not overwrite recipes that already have the same seed ID or name.
+3. Create a new version of the existing GCSD-restricted teacher deployment without changing its `/exec` URL or access policy.
+4. Do not replace `Index.html`, update the public-feed project, run the Recipe Import deployment, or change GitHub Pages for this release.
+5. Open **Recipes** and confirm 37 migrated pathway recipes plus any teacher-created recipes already present. Open several recipes and confirm their yield, ingredient structure, equipment, and procedures.
+
+The source collection is the standalone `585SwineMerchant/GCSD-Advanced-Culinary` repository's pathway recipe file. This migration copies culinary recipe content only. It does not connect to the old Cloudflare Worker or D1 database and does not import accounts, events, submissions, application state, or audit records. The old source catalog also identifies 171 possible future transcriptions; those metadata-only entries are not added to the working Recipe Library because they do not yet contain complete ingredients and procedures. Every migrated recipe retains a visible teacher-verification warning for allergens, substitutions, holding limits, temperatures, and current food-safety requirements.
