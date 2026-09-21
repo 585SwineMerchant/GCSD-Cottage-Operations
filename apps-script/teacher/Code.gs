@@ -116,6 +116,7 @@ function initializeWorkbook_() {
   });
   seedStarterPriceCatalog_();
   if (typeof seedStarterRecipeLibrary_ === "function") seedStarterRecipeLibrary_();
+  if (typeof seedRecoveredRecipeLibrary_ === "function") seedRecoveredRecipeLibrary_();
 }
 
 function seedStarterPriceCatalog_() {

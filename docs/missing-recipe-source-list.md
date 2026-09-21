@@ -1,0 +1,64 @@
+# Missing Recipe Source List
+
+These **58** catalog records still require complete source photos before they can be transcribed and added to the Version 2 recipe library.
+
+- **R021 — Chicken Rice Soup (Canja)** — Method page survived, but the title/yield/ingredient page did not.
+- **R099 — Spaetzle**
+- **R100 — Fresh Egg Pasta**
+- **R101 — Basic Boiled Pasta**
+- **R102 — Basic Polenta**
+- **R103 — Sushi Rice**
+- **R104 — Thai Sticky Rice with Mango**
+- **R105 — Risotto**
+- **R106 — Risotto alla Milanese**
+- **R107 — Coconut Rice**
+- **R108 — Rice and Beans**
+- **R109 — Rice Pilaf**
+- **R110 — Vegetarian Chili**
+- **R111 — Potatoes au Gratin (Gratin Dauphinoise)**
+- **R112 — Roasted Tuscan-Style Potatoes**
+- **R113 — Glazed Sweet Potatoes**
+- **R114 — Whipped Potatoes**
+- **R115 — Baked French Fries**
+- **R116 — Lean Dough**
+- **R117 — Bagels**
+- **R118 — Soft Roll Dough / Knot Rolls**
+- **R119 — Parker House Rolls**
+- **R120 — Sweet Dough Coffee Cake**
+- **R121 — Raisin Dough**
+- **R122 — Challah (Three-Braid)**
+- **R123 — Brioche a Tete**
+- **R124 — Naan**
+- **R125 — Raisin Bread with Cinnamon Swirl**
+- **R126 — Pita**
+- **R127 — Yeast-Raised Doughnuts**
+- **R128 — Ciabatta**
+- **R129 — Soft Pretzels**
+- **R146 — Basic Pie Dough**
+- **R147 — Pate Brisee**
+- **R148 — 1-2-3 Cookie Dough**
+- **R149 — Savory Short Dough**
+- **R150 — Pate a Choux**
+- **R151 — Crepes**
+- **R152 — Graham Cracker Crust**
+- **R153 — Strudel Dough**
+- **R154 — Croissant Dough**
+- **R155 — Danish Dough**
+- **R156 — Buttermilk Biscuits**
+- **R157 — Cream Scones**
+- **R158 — Old-Fashioned Pound Cake**
+- **R159 — Sour Cream Streusel Pound Cake**
+- **R160 — Vanilla Sponge**
+- **R161 — Cheesecake**
+- **R162 — Pastry Cream**
+- **R163 — Panna Cotta**
+- **R164 — Fruit Curd**
+- **R165 — Lemon Curd**
+- **R166 — Chocolate Mousse**
+- **R167 — Vanilla Ice Cream**
+- **R168 — Chocolate Ice Cream**
+- **R169 — Cranberry Orange Muffins**
+- **R170 — Lemon Poppy Seed Muffins**
+- **R171 — Corn Muffins**
+
+The source-recovery reconciliation and the three audit-only master formulas are documented in `recovered-recipe-audit.md`.

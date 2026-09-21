@@ -6,10 +6,12 @@ import test from "node:test";
 async function teacherContext(globals = {}) {
   const catalog = await readFile(new URL("../apps-script/teacher/Catalog.gs", import.meta.url), "utf8");
   const pathwayRecipes = await readFile(new URL("../apps-script/teacher/PathwayRecipes.gs", import.meta.url), "utf8");
+  const recoveredRecipes = await readFile(new URL("../apps-script/teacher/RecoveredRecipes.gs", import.meta.url), "utf8");
   const source = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
   const context = vm.createContext({ console, ...globals });
   vm.runInContext(catalog, context, { filename: "Catalog.gs" });
   vm.runInContext(pathwayRecipes, context, { filename: "PathwayRecipes.gs" });
+  vm.runInContext(recoveredRecipes, context, { filename: "RecoveredRecipes.gs" });
   vm.runInContext(source, context, { filename: "Code.gs" });
   return context;
 }
@@ -163,11 +165,37 @@ test("legacy pathway recipes seed independently without importing Cloudflare rec
   const fake = fakeAppsScript();
   const context = await teacherContext(fake.globals);
   context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
-  assert.equal(context.records_("Recipes").length, 37);
+  assert.equal(context.records_("Recipes").length, 147);
   assert.equal(context.records_("RecipeVersions").length, 37);
-  assert.equal(context.recipeSummaries_().every(recipe => recipe.status === "Approved" && recipe.approval_issues.length === 0), true);
+  const recipes = context.recipeSummaries_();
+  assert.equal(recipes.filter(recipe => recipe.status === "Approved" && recipe.approval_issues.length === 0).length, 37);
+  assert.equal(recipes.filter(recipe => recipe.status === "Draft").length, 110);
   assert.deepEqual(JSON.parse(JSON.stringify(context.seedStarterRecipeLibrary_())), { added: 0, skipped: 37, total: 37 });
-  assert.equal(context.records_("Recipes").length, 37);
+  assert.equal(context.records_("Recipes").length, 147);
+});
+
+test("recovered source recipes remain review-only drafts and seed idempotently", async () => {
+  const recoveredRecipes = await readFile(new URL("../apps-script/teacher/RecoveredRecipes.gs", import.meta.url), "utf8");
+  const recoveryAudit = await readFile(new URL("../docs/recovered-recipe-audit.md", import.meta.url), "utf8");
+  const missingSources = await readFile(new URL("../docs/missing-recipe-source-list.md", import.meta.url), "utf8");
+  assert.equal([...recoveredRecipes.matchAll(/"id": "advanced-source-/g)].length, 110);
+  assert.match(recoveryAudit, /Catalog recipes\/master formulas: \*\*171\*\*/);
+  assert.match(recoveryAudit, /Complete recovered catalog records: \*\*113\*\*/);
+  assert.equal([...missingSources.matchAll(/^- \*\*R\d{3} —/gm)].length, 58);
+  assert.match(recoveredRecipes, /function seedRecoveredRecipeLibrary_/);
+  assert.match(recoveredRecipes, /status: "Draft"/);
+  assert.doesNotMatch(recoveredRecipes, /status: "Approved"/);
+
+  const fake = fakeAppsScript();
+  const context = await teacherContext(fake.globals);
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  const recovered = context.records_("Recipes").filter(recipe => String(recipe.recipe_id).startsWith("recovered_"));
+  assert.equal(recovered.length, 110);
+  assert.equal(recovered.every(recipe => recipe.status === "Draft" && Number(recipe.current_version) === 0), true);
+  assert.equal(recovered.every(recipe => recipe.allergens === "Teacher verification required"), true);
+  assert.equal(context.records_("RecipeVersions").filter(version => String(version.recipe_id).startsWith("recovered_")).length, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.seedRecoveredRecipeLibrary_())), { added: 0, skipped: 110, total: 110 });
+  assert.equal(context.records_("Recipes").filter(recipe => String(recipe.recipe_id).startsWith("recovered_")).length, 110);
 });
 
 test("publication validation requires the minimum operational event fields", async () => {

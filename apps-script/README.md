@@ -25,7 +25,7 @@ Copy both IDs from their Google URLs.
 
 ## 2. Create and configure the teacher project
 
-Create a standalone Apps Script project owned by the district account. Add `Code.gs`, `Index.html`, `Catalog.gs`, and `PathwayRecipes.gs` from `teacher/` with the same names. Use the included `appsscript.json` manifest settings.
+Create a standalone Apps Script project owned by the district account. Add `Code.gs`, `Index.html`, `Catalog.gs`, `PathwayRecipes.gs`, and `RecoveredRecipes.gs` from `teacher/` with the same names. Use the included `appsscript.json` manifest settings.
 
 In the Apps Script editor, run:
 
@@ -136,7 +136,7 @@ After replacing the teacher project files, run this once before creating the new
 initializeWorkbook();
 ```
 
-The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the recipe, publication-item, ingredient-price, event-purchase, cost-snapshot, budget, closeout, and dormant inventory tabs, and is safe to rerun. It also adds any missing recipes from the 37-recipe pathway starter library without duplicating an existing recipe with the same seed ID or name. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
+The migration accepts the existing managed headers as an exact prefix, appends missing columns, creates the recipe, publication-item, ingredient-price, event-purchase, cost-snapshot, budget, closeout, and dormant inventory tabs, and is safe to rerun. It also adds any missing recipes from the 37-recipe approved pathway starter library and all 110 recovered Advanced Culinary source transcriptions as review-only drafts. It stops instead of overwriting anything if a managed header was renamed, reordered, or replaced. Existing Event rows and immutable publication snapshots remain untouched.
 
 ## Recipe Library workflow
 

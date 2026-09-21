@@ -154,4 +154,13 @@ Version 0.9.3 accepts OCR noise after section headings, detects numbered cooking
 4. Do not replace `Index.html`, update the public-feed project, run the Recipe Import deployment, or change GitHub Pages for this release.
 5. Open **Recipes** and confirm 37 migrated pathway recipes plus any teacher-created recipes already present. Open several recipes and confirm their yield, ingredient structure, equipment, and procedures.
 
+## Recovered Advanced Culinary source library (v0.12.0)
+
+1. In the existing protected teacher Apps Script project, replace `Code.gs` and create a new script file named `RecoveredRecipes.gs` from the repository version. Keep the existing `PathwayRecipes.gs` file in the project.
+2. Save the files, then run `initializeWorkbook()` once from the editor. The function idempotently adds 110 recovered source transcriptions as **Draft** recipes. It does not alter the 37 approved pathway recipes or create approved versions for recovered records.
+3. Create a new version of the existing GCSD-restricted teacher deployment without changing its `/exec` URL or access policy.
+4. Do not replace `Index.html`, update the public-feed project, run the Recipe Import deployment, or change GitHub Pages for this release.
+5. Open **Recipes** and confirm the recovered records show Draft status. Review each source image, quantity, unit, yield, allergen, temperature, holding limit, and safety control before deliberately approving a recipe.
+6. Use `docs/recovered-recipe-audit.md` to track the 58 catalog records that still need source photos. The three recovered master-formula references remain audit-only and are not duplicated as production recipes.
+
 The source collection is the standalone `585SwineMerchant/GCSD-Advanced-Culinary` repository's pathway recipe file. This migration copies culinary recipe content only. It does not connect to the old Cloudflare Worker or D1 database and does not import accounts, events, submissions, application state, or audit records. The old source catalog also identifies 171 possible future transcriptions; those metadata-only entries are not added to the working Recipe Library because they do not yet contain complete ingredients and procedures. Every migrated recipe retains a visible teacher-verification warning for allergens, substitutions, holding limits, temperatures, and current food-safety requirements.
