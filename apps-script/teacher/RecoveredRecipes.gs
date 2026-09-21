@@ -5142,7 +5142,7 @@ function seedRecoveredRecipeLibrary_() {
       portion_size: clean_(source.portion || "Teacher verification required", 200),
       allergens: "Teacher verification required",
       competencies: clean_(provenance, 2000),
-      ingredients_json: JSON.stringify(legacyRecipeIngredients_(source.ingredients || [])),
+      ingredients_json: JSON.stringify(recoveredRecipeIngredients_(source.ingredients || [])),
       equipment_json: JSON.stringify(list_(source.equipment || [], 100, 200)),
       procedure_json: JSON.stringify(list_(source.procedure || [], 200, 1000)),
       safety_controls: verification.join(" "),
@@ -5164,4 +5164,79 @@ function seedRecoveredRecipeLibrary_() {
     source: "Recovered textbook pages uploaded by Kevin McCann"
   });
   return { added, skipped, total: RECOVERED_SOURCE_RECIPES.length };
+}
+
+function recoveredRecipeIngredients_(lines) {
+  return (Array.isArray(lines) ? lines : [])
+    .map(recoveredRecipeIngredient_)
+    .filter(Boolean)
+    .slice(0, 200);
+}
+
+function recoveredRecipeIngredient_(value) {
+  let line = String(value || "").replace(/\s+/g, " ").trim();
+  if (!line || /:\s*$/.test(line)) return null;
+
+  const unicodeFractions = { "¼": .25, "½": .5, "¾": .75, "⅓": 1 / 3, "⅔": 2 / 3, "⅛": .125, "⅜": .375, "⅝": .625, "⅞": .875 };
+  const amount = "(?:\\d+\\s+\\d+\\/\\d+|\\d+\\s*[¼½¾⅓⅔⅛⅜⅝⅞]|\\d+\\/\\d+|\\d+(?:\\.\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])";
+  const units = "(?:fl\\s*oz|tablespoons?|tbsp|teaspoons?|tsp|pounds?|lbs?|ounces?|oz|cups?|quarts?|pints?|gallons?|grams?|kilograms?|milliliters?|liters?|cloves?|bunch(?:es)?|cans?|packages?|each|[Ttc]|g|kg|ml|l)";
+  const start = line.match(new RegExp("^(" + amount + ")(?:\\s*[-–]\\s*(" + amount + "))?\\s*(" + units + ")?\\.?\\s+(.*)$", "i"));
+
+  if (start) {
+    let name = String(start[4] || "").replace(/^\([^)]*\)\s*/, "").trim();
+    const unit = recoveredRecipeUnit_(start[3] || "each");
+    if (!name) name = line;
+    const parts = recoveredRecipePreparation_(name);
+    if (start[2]) {
+      return { name: parts.name, quantity: 0, quantityText: `${start[1]}–${start[2]} ${unit}`, unit: "", preparation: parts.preparation };
+    }
+    return { name: parts.name, quantity: recoveredRecipeQuantity_(start[1], unicodeFractions), quantityText: "", unit, preparation: parts.preparation };
+  }
+
+  const reverse = line.match(new RegExp("^(.*?)\\s+(" + amount + ")(?:\\s*[-–]\\s*(" + amount + "))?\\s*(" + units + ")(?:\\s+|$)(.*)$", "i"));
+  if (reverse && String(reverse[1] || "").trim()) {
+    const unit = recoveredRecipeUnit_(reverse[4]);
+    const parts = recoveredRecipePreparation_([reverse[1], reverse[5]].filter(Boolean).join(" ").replace(/^\([^)]*\)\s*/, "").trim());
+    if (reverse[3]) {
+      return { name: parts.name, quantity: 0, quantityText: `${reverse[2]}–${reverse[3]} ${unit}`, unit: "", preparation: parts.preparation };
+    }
+    return { name: parts.name, quantity: recoveredRecipeQuantity_(reverse[2], unicodeFractions), quantityText: "", unit, preparation: parts.preparation };
+  }
+
+  return { name: line, quantity: 0, quantityText: "as needed / verify", unit: "", preparation: "" };
+}
+
+function recoveredRecipeQuantity_(value, fractions) {
+  const text = String(value || "").trim();
+  const mixed = text.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  const fraction = text.match(/^(\d+)\/(\d+)$/);
+  const unicode = text.match(/^(\d+)?\s*([¼½¾⅓⅔⅛⅜⅝⅞])$/);
+  if (mixed && Number(mixed[3])) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  if (fraction && Number(fraction[2])) return Number(fraction[1]) / Number(fraction[2]);
+  if (unicode) return Number(unicode[1] || 0) + Number(fractions[unicode[2]] || 0);
+  return positiveNumber_(text, 0);
+}
+
+function recoveredRecipeUnit_(value) {
+  const raw = String(value || "").replace(/\./g, "").replace(/\s+/g, " ").trim();
+  const lower = raw.toLowerCase();
+  const aliases = {
+    t: "tbsp", tablespoon: "tbsp", tablespoons: "tbsp", tbsp: "tbsp",
+    teaspoon: "tsp", teaspoons: "tsp", tsp: "tsp",
+    c: "cup", cup: "cup", cups: "cup",
+    pound: "lb", pounds: "lb", lb: "lb", lbs: "lb",
+    ounce: "oz", ounces: "oz", oz: "oz",
+    gram: "g", grams: "g", g: "g", kilogram: "kg", kilograms: "kg", kg: "kg",
+    milliliter: "ml", milliliters: "ml", ml: "ml", liter: "l", liters: "l", l: "l",
+    quart: "qt", quarts: "qt", pint: "pt", pints: "pt", gallon: "gal", gallons: "gal",
+    clove: "each", cloves: "each", bunch: "each", bunches: "each", can: "each", cans: "each",
+    package: "each", packages: "each", each: "each"
+  };
+  return aliases[lower] || lower || "each";
+}
+
+function recoveredRecipePreparation_(value) {
+  const line = String(value || "").trim();
+  const match = line.match(/^(.*?),\s*((?:chilled|cold|softened|melted|diced|minced|chopped|sliced|grated|divided|peeled|beaten|scraped|optional).*)$/i);
+  return match ? { name: match[1].trim(), preparation: match[2].trim() } : { name: line, preparation: "" };
 }

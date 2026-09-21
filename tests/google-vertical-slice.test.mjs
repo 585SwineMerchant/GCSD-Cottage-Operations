@@ -198,6 +198,21 @@ test("recovered source recipes remain review-only drafts and seed idempotently",
   assert.equal(context.records_("Recipes").filter(recipe => String(recipe.recipe_id).startsWith("recovered_")).length, 110);
 });
 
+test("recovered recipe migration is self-contained without PathwayRecipes.gs", async () => {
+  const catalog = await readFile(new URL("../apps-script/teacher/Catalog.gs", import.meta.url), "utf8");
+  const recoveredRecipes = await readFile(new URL("../apps-script/teacher/RecoveredRecipes.gs", import.meta.url), "utf8");
+  const source = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
+  const fake = fakeAppsScript();
+  const context = vm.createContext({ console, ...fake.globals });
+  vm.runInContext(catalog, context, { filename: "Catalog.gs" });
+  vm.runInContext(recoveredRecipes, context, { filename: "RecoveredRecipes.gs" });
+  vm.runInContext(source, context, { filename: "Code.gs" });
+  context.configureVerticalSlice({ spreadsheetId: "sheet_12345678901234567890", documentFolderId: "folder_12345678901234567890", allowedTeacherEmails: "teacher@greececsd.org", allowedDomain: "greececsd.org" });
+  assert.equal(context.records_("Recipes").length, 110);
+  assert.equal(context.records_("RecipeVersions").length, 0);
+  assert.equal(context.records_("Recipes").every(recipe => recipe.status === "Draft"), true);
+});
+
 test("publication validation requires the minimum operational event fields", async () => {
   const context = await teacherContext();
   const issues = Array.from(context.publicationIssues_({ event_name: "", client_display_name: "", service_date: "", guest_count: 0, menu_json: "[]", tasks_json: "[]" }));
