@@ -117,6 +117,7 @@ function initializeWorkbook_() {
   seedStarterPriceCatalog_();
   if (typeof seedStarterRecipeLibrary_ === "function") seedStarterRecipeLibrary_();
   if (typeof seedRecoveredRecipeLibrary_ === "function") seedRecoveredRecipeLibrary_();
+  if (typeof refreshRecoveredRecipeIngredients_ === "function") refreshRecoveredRecipeIngredients_();
 }
 
 function seedStarterPriceCatalog_() {

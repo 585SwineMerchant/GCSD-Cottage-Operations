@@ -196,6 +196,19 @@ test("recovered source recipes remain review-only drafts and seed idempotently",
   assert.equal(context.records_("RecipeVersions").filter(version => String(version.recipe_id).startsWith("recovered_")).length, 0);
   assert.deepEqual(JSON.parse(JSON.stringify(context.seedRecoveredRecipeLibrary_())), { added: 0, skipped: 110, total: 110 });
   assert.equal(context.records_("Recipes").filter(recipe => String(recipe.recipe_id).startsWith("recovered_")).length, 110);
+
+  const untouched = recovered[0];
+  const teacherEdited = recovered[1];
+  context.updateRecord_("Recipes", "recipe_id", untouched.recipe_id, { ingredients_json: "[]" });
+  context.updateRecord_("Recipes", "recipe_id", teacherEdited.recipe_id, {
+    ingredients_json: "[]",
+    updated_at: "2099-01-01T00:00:00.000Z"
+  });
+  const refresh = JSON.parse(JSON.stringify(context.refreshRecoveredRecipeIngredients_()));
+  assert.equal(refresh.updated, 1);
+  assert.equal(refresh.skipped, 1);
+  assert.notEqual(context.records_("Recipes").find(recipe => recipe.recipe_id === untouched.recipe_id).ingredients_json, "[]");
+  assert.equal(context.records_("Recipes").find(recipe => recipe.recipe_id === teacherEdited.recipe_id).ingredients_json, "[]");
 });
 
 test("recovered recipe migration is self-contained without PathwayRecipes.gs", async () => {
