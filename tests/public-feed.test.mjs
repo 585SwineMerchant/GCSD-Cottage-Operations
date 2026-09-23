@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import test from "node:test";
 
-async function feedContext(rows, itemRows = [], priceRows = []) {
+async function feedContext(rows, itemRows = [], priceRows = [], recipeRows = []) {
   const source = await readFile(new URL("../apps-script/public-feed/Code.gs", import.meta.url), "utf8");
   const sheet = {
     getLastRow: () => rows.length + 1,
@@ -17,9 +17,13 @@ async function feedContext(rows, itemRows = [], priceRows = []) {
     getLastRow: () => priceRows.length + 1,
     getRange: () => ({ getDisplayValues: () => priceRows.map(row => [...row]) })
   };
+  const recipeSheet = {
+    getLastRow: () => recipeRows.length + 1,
+    getRange: () => ({ getDisplayValues: () => recipeRows.map(row => [...row]) })
+  };
   const context = vm.createContext({
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => "sheet_12345678901234567890", setProperty() {} }) },
-    SpreadsheetApp: { openById: () => ({ getSheetByName: name => name === "PublicationItems" ? itemSheet : name === "IngredientPrices" ? priceSheet : sheet }) },
+    SpreadsheetApp: { openById: () => ({ getSheetByName: name => name === "PublicationItems" ? itemSheet : name === "IngredientPrices" ? priceSheet : name === "Recipes" ? recipeSheet : sheet }) },
     ContentService: { MimeType: { TEXT: "text", JAVASCRIPT: "javascript", JSON: "json" }, createTextOutput: content => ({ content, setMimeType() { return this; } }) }
   });
   vm.runInContext(source, context, { filename: "public-feed/Code.gs" });
@@ -52,6 +56,50 @@ test("public feed exposes only sanitized planning prices", async () => {
   assert.equal(json.includes("sku-private"), false);
 });
 
+test("public feed publishes approved recipes as the Cottage menu without teacher identity fields", async () => {
+  const snapshot = { schemaVersion: 3, revision: 1, publishedAt: "2026-09-20T12:00:00.000Z", events: [], yearArchive: [] };
+  const approved = [
+    "seed_ca12-002-rosemary-focaccia",
+    "Rosemary Focaccia",
+    "Breads, Pasta, Grains & Fermentation",
+    "Approved",
+    "1",
+    "1",
+    "sheet",
+    "1 baked 12 x 18-inch sheet",
+    "Wheat",
+    "Culinary Arts 1 & 2 · Unit 2",
+    JSON.stringify([{ name: "AP flour", quantity: 650, unit: "g", preparation: "" }]),
+    JSON.stringify(["Stand mixer"]),
+    JSON.stringify(["Mix and ferment.", "Bake until golden."]),
+    "Follow approved food-safety procedures.",
+    JSON.stringify(["Golden brown crust"]),
+    "2026-09-20T10:00:00.000Z",
+    "teacher@greececsd.org",
+    "2026-09-20T10:00:00.000Z",
+    "teacher@greececsd.org"
+  ];
+  const draft = [...approved];
+  draft[0] = "draft-1";
+  draft[1] = "Unapproved Draft";
+  draft[3] = "Draft";
+  const context = await feedContext(
+    [["pub-1", "evt-a", "1", snapshot.publishedAt, "teacher@greececsd.org", JSON.stringify(snapshot)]],
+    [],
+    [],
+    [approved, draft]
+  );
+  const result = context.latestSnapshot_();
+  assert.equal(result.recipes.length, 1);
+  assert.equal(result.recipes[0].name, "Rosemary Focaccia");
+  assert.equal(result.recipes[0].ingredients[0], "650 g AP flour");
+  assert.equal(result.cottageMenu.length, 1);
+  assert.equal(result.cottageMenu[0].recipeId, "seed_ca12-002-rosemary-focaccia");
+  const json = JSON.stringify({ recipes: result.recipes, cottageMenu: result.cottageMenu });
+  assert.equal(json.includes("teacher@greececsd.org"), false);
+  assert.equal(json.includes("Unapproved Draft"), false);
+});
+
 test("public feed fails closed when the newest snapshot is malformed", async () => {
   const valid = { schemaVersion: 2, revision: 1, events: [{ id: "evt-private-risk" }], yearArchive: [] };
   const context = await feedContext([
@@ -59,7 +107,7 @@ test("public feed fails closed when the newest snapshot is malformed", async () 
     ["pub-2", "evt-a", "1", "2026-09-19T12:01:00.000Z", "teacher@greececsd.org", "{broken"]
   ]);
   const snapshot = context.latestSnapshot_();
-  assert.equal(snapshot.schemaVersion, 2);
+  assert.equal(snapshot.schemaVersion, 4);
   assert.deepEqual(Array.from(snapshot.events), []);
   assert.match(snapshot.message, /invalid/i);
 });
