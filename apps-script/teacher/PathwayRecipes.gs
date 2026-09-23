@@ -1166,8 +1166,9 @@ const STARTER_PATHWAY_CATEGORIES = Object.freeze({
 });
 
 /**
- * Imports only culinary recipe content from the standalone legacy repository.
- * No Cloudflare state, accounts, events, submissions, or audit records are read.
+ * Imports the source-approved Culinary 1 & 2 starter recipe book into the
+ * teacher Recipe Library. No Cloudflare state, accounts, events, submissions,
+ * or audit records are read.
  * Exact recipe IDs and names make this safe to rerun.
  */
 function seedStarterRecipeLibrary_() {
@@ -1214,7 +1215,7 @@ function seedStarterRecipeLibrary_() {
       status: "Approved",
       created_at: now,
       created_by: teacher.email,
-      change_note: `Migrated from the standalone GCSD-Advanced-Culinary pathway library. Source: ${source.source || "GCSD pathway source"}; original ID: ${source.id}.`,
+      change_note: `Source-approved Culinary 1 & 2 starter recipe. Source: ${source.source || "GCSD Culinary 1 & 2 Recipe Book"}; original ID: ${source.id}.`,
       snapshot_json: JSON.stringify(snapshot)
     });
     existingIds.add(recipeId);
@@ -1222,7 +1223,7 @@ function seedStarterRecipeLibrary_() {
     added += 1;
   });
 
-  if (added) audit_(teacher.email, "seed_pathway_recipes", "recipe_library", "starter-pathway", { added, skipped, sourceRepository: "585SwineMerchant/GCSD-Advanced-Culinary" });
+  if (added) audit_(teacher.email, "seed_pathway_recipes", "recipe_library", "starter-pathway", { added, skipped, sourceRepository: "585SwineMerchant/GCSD-Culinary-1-2-Field-Manual" });
   return { added, skipped, total: STARTER_PATHWAY_RECIPES.length };
 }
 
