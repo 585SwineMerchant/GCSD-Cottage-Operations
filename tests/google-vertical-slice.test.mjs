@@ -502,7 +502,7 @@ test("recipe library controls and student approved-recipe access are present", a
   assert.match(teacher, /approveRecipe/);
   assert.match(teacher, /attachRecipeToEvent/);
   assert.match(student, /data-menu-recipe-event/);
-  assert.match(student, /Teacher-approved production recipe/);
+  assert.match(student, /Teacher-approved (?:event production|Cottage menu) recipe/);
   assert.match(student, /Safety controls/);
 });
 
