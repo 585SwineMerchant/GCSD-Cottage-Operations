@@ -151,13 +151,13 @@ test("public and teacher interfaces use the Cottage brand and tab identity", asy
   assert.match(teacherCode, /setFaviconUrl\("https:\/\/585swinemerchant\.github\.io\/GCSD-Cottage-Operations\/assets\/cottage-logo\.png"\)/);
 });
 
-test("legacy pathway recipes seed independently without importing Cloudflare records", async () => {
+test("source-approved pathway recipes seed independently without importing Cloudflare records", async () => {
   const teacherCode = await readFile(new URL("../apps-script/teacher/Code.gs", import.meta.url), "utf8");
   const pathwayRecipes = await readFile(new URL("../apps-script/teacher/PathwayRecipes.gs", import.meta.url), "utf8");
   assert.match(teacherCode, /seedStarterRecipeLibrary_/);
   assert.equal([...pathwayRecipes.matchAll(/"id": "ca12-/g)].length, 37);
   assert.match(pathwayRecipes, /function seedStarterRecipeLibrary_/);
-  assert.match(pathwayRecipes, /Migrated from the standalone GCSD-Advanced-Culinary pathway library/);
+  assert.match(pathwayRecipes, /Source-approved Culinary 1 & 2 starter recipe/);
   ["users", "app_state", "audit_log", "submittedByEmail"].forEach(privateField => {
     assert.equal(pathwayRecipes.includes(privateField), false, `legacy recipe seed included ${privateField}`);
   });
