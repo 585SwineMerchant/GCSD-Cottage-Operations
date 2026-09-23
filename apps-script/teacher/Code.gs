@@ -296,6 +296,14 @@ function getRecipeLibrary() {
   return recipeSummaries_();
 }
 
+function syncStarterPathwayRecipes() {
+  assertTeacher_();
+  if (typeof seedStarterRecipeLibrary_ !== "function") {
+    throw new Error("PathwayRecipes.gs is not installed in this Apps Script project. Add it from the repository before syncing the starter menu.");
+  }
+  return seedStarterRecipeLibrary_();
+}
+
 function getRecipe(recipeId) {
   assertTeacher_();
   const recipe = findRecord_(SHEETS.RECIPES, "recipe_id", recipeId);

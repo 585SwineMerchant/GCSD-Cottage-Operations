@@ -6,7 +6,7 @@
   const dateLabel = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Date pending";
   const publishedLabel = value => value ? new Date(value).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Not yet published";
 
-  let snapshot = { schemaVersion: 3, revision: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [] };
+  let snapshot = { schemaVersion: 4, revision: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [], recipes: [], cottageMenu: [] };
   let teamFilter = "all";
 
   function list(value) {
@@ -71,6 +71,7 @@
     q("#errorNotice").hidden = !snapshot.notice;
     q("#errorNotice").textContent = snapshot.notice || "";
     updateCostRecipeOptions();
+    renderStudioLibrary();
     if (!q("#costingView").hidden) renderCostAnalysis();
   }
 
@@ -111,11 +112,11 @@
     button.textContent = "Checking…";
     try {
       if (!config.publicFeedUrl) {
-        snapshot = { schemaVersion: 1, revision: 0, publishedAt: "", events: [], yearArchive: [], notice: "The version-two publication feed has not been connected yet." };
+        snapshot = { schemaVersion: 4, revision: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [], recipes: [], cottageMenu: [], notice: "The publication feed has not been connected yet." };
       } else {
         const next = await loadJsonp(config.publicFeedUrl);
         if (!next || !Array.isArray(next.events)) throw new Error("The publication feed returned an invalid response.");
-        snapshot = { schemaVersion: 1, revision: 0, publishedAt: "", events: [], yearArchive: [], ...next };
+        snapshot = { schemaVersion: 4, revision: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [], recipes: [], cottageMenu: [], ...next };
         delete snapshot.notice;
         delete snapshot.stale;
         saveSnapshot(snapshot);
@@ -124,7 +125,7 @@
       const saved = savedSnapshot();
       snapshot = saved && Array.isArray(saved.events)
         ? { ...saved, stale: true, notice: `Unable to check for an update. Continuing to display Revision ${Number(saved.revision || 0)}, published ${publishedLabel(saved.publishedAt)}.` }
-        : { schemaVersion: 1, revision: 0, publishedAt: "", events: [], yearArchive: [], notice: error.message || String(error) };
+        : { schemaVersion: 4, revision: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [], recipes: [], cottageMenu: [], notice: error.message || String(error) };
     } finally {
       button.disabled = false;
       button.textContent = "Refresh Event Data";
@@ -132,14 +133,23 @@
     }
   }
 
+  function showRecipeDialog(recipe, contextLabel="Teacher-approved Cottage recipe") {
+    if (!recipe) return;
+    q("#recipeContent").innerHTML = `<p class="eyebrow">${esc(contextLabel)} · Version ${Number(recipe.version || 0)}</p><h2>${esc(recipe.name)}</h2><p>${esc([recipe.category, recipe.yield && `Yield ${recipe.yield}`, recipe.portion && `Portion ${recipe.portion}`, recipe.overagePercent && `${recipe.overagePercent}% production overage`].filter(Boolean).join(" · "))}</p><div class="recipe-grid"><section><h3>Ingredients</h3><ul>${list(recipe.ingredients).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Equipment</h3><ul>${list(recipe.equipment).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Procedure</h3><ol>${list(recipe.procedure).map(item => `<li>${esc(item)}</li>`).join("")}</ol></section><section><h3>Quality controls</h3><ul>${list(recipe.qualityControls).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section></div><p><strong>Allergens:</strong> ${esc(recipe.allergens || "Teacher verification required")}</p><p><strong>Safety controls:</strong> ${esc(recipe.safetyControls || "Follow the approved kitchen safety plan")}</p>${recipe.competencies?`<p><strong>Learning focus:</strong> ${esc(recipe.competencies)}</p>`:""}`;
+    q("#recipeDialog").showModal();
+  }
+
   function openRecipe(eventId, taskId, menuName) {
     const event = (snapshot.events || []).find(item => item.id === eventId);
     const task = event?.tasks?.find(item => item.id === taskId);
     const menuItem = event?.menu?.find(item => String(item.name || "").toLowerCase() === String(menuName || task?.name || "").toLowerCase());
     const recipe = task?.recipe || menuItem?.recipe;
-    if (!recipe) return;
-    q("#recipeContent").innerHTML = `<p class="eyebrow">Teacher-approved production recipe · Version ${Number(recipe.version || 0)}</p><h2>${esc(recipe.name)}</h2><p>${esc([recipe.yield && `Yield ${recipe.yield}`, recipe.portion && `Portion ${recipe.portion}`, recipe.overagePercent && `${recipe.overagePercent}% production overage`].filter(Boolean).join(" · "))}</p><div class="recipe-grid"><section><h3>Ingredients</h3><ul>${list(recipe.ingredients).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Equipment</h3><ul>${list(recipe.equipment).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section><section><h3>Procedure</h3><ol>${list(recipe.procedure).map(item => `<li>${esc(item)}</li>`).join("")}</ol></section><section><h3>Quality controls</h3><ul>${list(recipe.qualityControls).map(item => `<li>${esc(item)}</li>`).join("")}</ul></section></div><p><strong>Allergens:</strong> ${esc(recipe.allergens || "See Event Order")}</p><p><strong>Safety controls:</strong> ${esc(recipe.safetyControls || "Follow the approved kitchen safety plan")}</p>${recipe.competencies?`<p><strong>Learning focus:</strong> ${esc(recipe.competencies)}</p>`:""}`;
-    q("#recipeDialog").showModal();
+    showRecipeDialog(recipe, "Teacher-approved event production recipe");
+  }
+
+  function openLibraryRecipe(recipeId) {
+    const recipe = (snapshot.recipes || []).find(item => String(item.id) === String(recipeId));
+    showRecipeDialog(recipe, "Teacher-approved Cottage menu recipe");
   }
 
   function printEvent(eventId) {
@@ -156,13 +166,27 @@
   function baseQuantity(quantity,unit){const values={lb:["mass",16],oz:["mass",1],gal:["volume",128],qt:["volume",32],pt:["volume",16],cup:["volume",8],"fl oz":["volume",1],tbsp:["volume",.5],tsp:["volume",1/6],each:["count",1]},value=values[canonicalUnit(unit)];return value?{dimension:value[0],quantity:Number(quantity||0)*value[1]}:null;}
   function convertQuantity(quantity,fromUnit,toUnit){const from=baseQuantity(quantity,fromUnit),to=baseQuantity(1,toUnit);return from&&to&&from.dimension===to.dimension?from.quantity/to.quantity:0;}
   function catalogMatch(name,unit){const target=normalizedName(name);return (snapshot.priceCatalog||[]).map(product=>{const names=[product.ingredientName,product.productName,...(product.aliases||[])].map(normalizedName).filter(Boolean),score=names[0]===target?100:names.includes(target)?90:names.some(alias=>alias.length>3&&(target.includes(alias)||alias.includes(target)))?60:0,converted=convertQuantity(product.packageQuantity,product.packageUnit,unit);return score&&converted?{product,score,packageQuantity:converted}:null}).filter(Boolean).sort((a,b)=>b.score-a.score||String(b.product.checkedAt||"").localeCompare(String(a.product.checkedAt||"")))[0]||null;}
-  function costingRecipes(){const found=[];(snapshot.events||[]).forEach(event=>(event.menu||[]).forEach(item=>{if(item.recipe&&!found.some(entry=>entry.key===`${item.recipe.name}|${item.recipe.version}`))found.push({key:`${item.recipe.name}|${item.recipe.version}`,eventName:event.name,recipe:item.recipe})}));return found;}
+  function costingRecipes(){const found=[];(snapshot.recipes||[]).forEach(recipe=>{const key=`${recipe.name}|${recipe.version}`;if(!found.some(entry=>entry.key===key))found.push({key,eventName:"Cottage menu",recipe})});(snapshot.events||[]).forEach(event=>(event.menu||[]).forEach(item=>{if(item.recipe&&!found.some(entry=>entry.key===`${item.recipe.name}|${item.recipe.version}`))found.push({key:`${item.recipe.name}|${item.recipe.version}`,eventName:event.name,recipe:item.recipe})}));return found;}
   function updateCostRecipeOptions(){const select=q("#costRecipe"),current=select.value;select.innerHTML=`<option value="">Start with a blank cost sheet</option>${costingRecipes().map((entry,index)=>`<option value="${index}">${esc(entry.recipe.name)} · v${Number(entry.recipe.version||0)} · ${esc(entry.eventName)}</option>`).join("")}`;if([...select.options].some(option=>option.value===current))select.value=current;}
   function costRowHtml(row,index){return `<div class="cost-row" data-cost-row="${index}"><label class="wide">Ingredient<input data-cost-field="name" value="${esc(row.name||'')}"></label><label>EP recipe quantity<input data-cost-field="quantity" type="number" min="0" step="any" value="${esc(row.quantity||'')}"></label><label>Unit<input data-cost-field="unit" value="${esc(row.unit||'')}"></label><label>AP/EP yield %<input data-cost-field="yieldPercent" type="number" min="1" max="100" step="0.1" value="${esc(row.yieldPercent||100)}"></label><label>Instruction<input data-cost-field="quantityText" value="${esc(row.quantityText||'')}"></label><button class="secondary remove-cost-row" type="button" data-remove-cost-row="${index}">Remove</button></div>`;}
   function renderCostRows(){q("#costIngredients").innerHTML=costRows.length?costRows.map(costRowHtml).join(""):'<p class="empty">Add an ingredient or load a published recipe.</p>';q("#costIngredients").querySelectorAll("[data-cost-field]").forEach(input=>input.addEventListener("input",event=>{const row=costRows[Number(event.target.closest("[data-cost-row]").dataset.costRow)],field=event.target.dataset.costField;row[field]=["quantity","yieldPercent"].includes(field)?Number(event.target.value||0):event.target.value;row.perPortion=field==="quantity"&&Number(q("#costYield").value)>0?row.quantity/Number(q("#costYield").value):row.perPortion;renderCostAnalysis();}));q("#costIngredients").querySelectorAll("[data-remove-cost-row]").forEach(button=>button.onclick=()=>{costRows.splice(Number(button.dataset.removeCostRow),1);renderCostRows();renderCostAnalysis();});renderCostAnalysis();}
   function analyzedRows(){return costRows.map(row=>{const ep=Number(row.quantity||0),yieldPercent=Math.max(1,Math.min(100,Number(row.yieldPercent||100))),ap=ep/(yieldPercent/100),match=ep&&row.unit?catalogMatch(row.name,row.unit):null,packages=match?Math.ceil(ap/match.packageQuantity):0,consumptionCost=match?ap/match.packageQuantity*Number(match.product.packagePrice||0):0,purchaseCost=match?packages*Number(match.product.packagePrice||0):0;return{...row,ep,ap,yieldPercent,match,packages,consumptionCost,purchaseCost}});}
   function renderCostAnalysis(){const rows=analyzedRows(),yieldCount=Math.max(1,Number(q("#costYield").value||1)),recipeCost=rows.reduce((sum,row)=>sum+row.consumptionCost,0),purchaseTotal=rows.reduce((sum,row)=>sum+row.purchaseCost,0),portionCost=recipeCost/yieldCount,targetPct=Math.max(1,Number(q("#targetFoodCost").value||30))/100,suggested=portionCost/targetPct,menuPrice=Number(q("#menuPrice").value||0),actualPct=menuPrice?portionCost/menuPrice*100:0,contribution=menuPrice?menuPrice-portionCost:0,salesMix=Number(q("#salesMix").value||0),popBenchmark=Number(q("#popularityBenchmark").value||0),marginBenchmark=Number(q("#marginBenchmark").value||0);let classification="Add sales-mix and margin benchmarks";if(salesMix&&popBenchmark&&menuPrice&&marginBenchmark>=0){classification=salesMix>=popBenchmark?(contribution>=marginBenchmark?"Star":"Plowhorse"):(contribution>=marginBenchmark?"Puzzle":"Dog")};q("#costMetrics").innerHTML=`<div class="metric-stack"><div class="metric-card"><span>Recipe food cost</span><strong>$${recipeCost.toFixed(2)}</strong></div><div class="metric-card"><span>Cost per portion</span><strong>$${portionCost.toFixed(2)}</strong></div><div class="metric-card"><span>Target menu price</span><strong>$${suggested.toFixed(2)}</strong></div><div class="metric-card"><span>Food-cost % at proposed price</span><strong>${menuPrice?actualPct.toFixed(1)+'%':'—'}</strong></div><div class="metric-card"><span>Contribution margin</span><strong>${menuPrice?'$'+contribution.toFixed(2):'—'}</strong></div><div class="metric-card"><span>Menu engineering</span><strong>${esc(classification)}</strong></div><div class="metric-card"><span>Package purchase estimate</span><strong>$${purchaseTotal.toFixed(2)}</strong></div></div>`;q("#marketOrder").innerHTML=rows.length?rows.map(row=>{const p=row.match?.product,age=p?.checkedAt?Math.floor((Date.now()-new Date(`${p.checkedAt}T12:00:00Z`).getTime())/86400000):null;return `<tr><td>${esc(row.name)}${row.quantityText?`<small>${esc(row.quantityText)}</small>`:''}</td><td>${row.ep?`${row.ap.toFixed(3)} ${esc(row.unit)} (${row.yieldPercent}% yield)`:'Qualitative / as needed'}</td><td>${p?`${esc(p.productName)}<small>${esc(p.packageDescription)}</small>`:'No catalog match'}</td><td>${p?row.packages:'—'}</td><td>${p?'$'+row.purchaseCost.toFixed(2):'—'}</td><td>${p?`${esc(p.supplier)} · ${esc(p.storeLocation||'')}<small>${esc(p.priceType||'estimate')} · checked ${esc(p.checkedAt||'unknown')}${age>45?' · STALE':''}${p.variableWeight?' · variable weight':''}</small>`:'Add or revise the ingredient name/unit'}</td></tr>`}).join(''):'<tr><td colspan="6">No ingredients entered.</td></tr>';}
   function loadCostRecipe(){const entry=costingRecipes()[Number(q("#costRecipe").value)];if(!entry)return;const recipe=entry.recipe,yieldMatch=String(recipe.yield||"").match(/([\d.]+)/),standard=Number(recipe.standardYieldQuantity||recipe.productionTarget||(yieldMatch&&yieldMatch[1])||12),rawItems=(recipe.ingredientData||[]).length?recipe.ingredientData:list(recipe.ingredients).map(value=>{const match=String(value).match(/^([\d.]+)\s+(lb|oz|fl oz|gal|qt|pt|cup|tbsp|tsp|each)\s+(.+)$/i);return match?{quantity:Number(match[1]),unit:match[2],name:match[3].replace(/\s+\([^)]*\)$/,"")}:{quantity:0,unit:"",name:String(value),quantityText:"as directed"}});q("#costTitle").value=`${recipe.name} · Version ${Number(recipe.version||0)}`;q("#costYield").value=standard;costRows=rawItems.map(item=>({name:item.name,quantity:Number(item.quantity||0),unit:item.unit||"",quantityText:item.quantityText||"",yieldPercent:100,perPortion:Number(item.quantity||0)/Math.max(standard,1)}));renderCostRows();}
+  function renderStudioLibrary(){
+    const container=q("#studioRecipeLibrary"),summary=q("#studioLibrarySummary"),searchInput=q("#studioLibrarySearch"),categorySelect=q("#studioLibraryCategory");
+    if(!container||!summary||!searchInput||!categorySelect)return;
+    const recipes=(snapshot.recipes||[]).slice().sort((a,b)=>String(a.category||"").localeCompare(String(b.category||""))||String(a.name||"").localeCompare(String(b.name||"")));
+    const categories=[...new Set(recipes.map(recipe=>String(recipe.category||"Uncategorized")).filter(Boolean))].sort();
+    const currentCategory=categorySelect.value;
+    categorySelect.innerHTML=`<option value="">All categories</option>${categories.map(category=>`<option value="${esc(category)}">${esc(category)}</option>`).join("")}`;
+    if(categories.includes(currentCategory))categorySelect.value=currentCategory;
+    const search=searchInput.value.trim().toLowerCase(),category=categorySelect.value;
+    const filtered=recipes.filter(recipe=>(!category||String(recipe.category||"Uncategorized")===category)&&(!search||`${recipe.name} ${recipe.category||""}`.toLowerCase().includes(search)));
+    summary.textContent=`${recipes.length} approved Cottage menu recipe${recipes.length===1?"":"s"}${filtered.length!==recipes.length?` · ${filtered.length} shown`:""}`;
+    container.innerHTML=filtered.length?filtered.map(recipe=>`<article class="recipe-library-card"><div><p class="eyebrow">${esc(recipe.category||"Uncategorized")}</p><h3>${esc(recipe.name)}</h3><p>${esc([recipe.yield&&`Yield ${recipe.yield}`,recipe.portion&&`Portion ${recipe.portion}`].filter(Boolean).join(" · ")||"Teacher-approved standard")}</p></div><button class="secondary" type="button" data-library-recipe="${esc(recipe.id)}">View recipe</button></article>`).join(""):'<div class="empty">No approved Cottage recipes match these filters.</div>';
+  }
+
   const STUDIO_KEY="gcsdCottageRecipeStudioV1";
   const studioFields={searchTerms:"studioSearchTerms",recipeUrl:"studioRecipeUrl",intakeText:"studioIntakeText",name:"studioName",category:"studioCategory",standardYieldQuantity:"studioYieldQuantity",standardYieldUnit:"studioYieldUnit",portionSize:"studioPortion",allergens:"studioAllergens",competencies:"studioCompetencies",ingredientsText:"studioIngredients",equipmentText:"studioEquipment",procedureText:"studioProcedure",safetyControls:"studioSafety",qualityControlsText:"studioQuality",sourceNotes:"studioSourceNotes"};
   let studioImageFile=null,studioImageBitmap=null,studioCrop={x:0,y:0,width:1,height:1},studioCropStart=null,studioOcrPromise=null;
@@ -187,7 +211,7 @@
   async function copyStudioExport(){const text=JSON.stringify(studioExport(),null,2);try{await navigator.clipboard.writeText(text);studioStatus("Teacher-review export copied. Send it through the teacher-approved classroom workflow.")}catch(_){const area=document.createElement("textarea");area.value=text;document.body.appendChild(area);area.select();document.execCommand("copy");area.remove();studioStatus("Teacher-review export copied. Send it through the teacher-approved classroom workflow.")}}
   function downloadStudioExport(){const payload=studioExport(),blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),link=document.createElement("a"),safe=(payload.recipe.name||"recipe-draft").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"recipe-draft";link.href=url;link.download=`${safe}.json`;link.click();URL.revokeObjectURL(url);studioStatus("Recipe Studio JSON downloaded for teacher review.")}
   function clearStudioDraft(){if(!window.confirm("Clear the Recipe Studio draft saved in this browser?"))return;localStorage.removeItem(STUDIO_KEY);writeStudioFields({});studioStatus("Local Recipe Studio draft cleared.")}
-  function showStudentView(view){q("#eventsView").hidden=view!=="events";q("#costingView").hidden=view!=="costing";q("#studioView").hidden=view!=="studio";document.querySelectorAll("[data-student-view]").forEach(button=>button.classList.toggle("active",button.dataset.studentView===view));if(view==="costing"){updateCostRecipeOptions();renderCostAnalysis();}}
+  function showStudentView(view){q("#eventsView").hidden=view!=="events";q("#costingView").hidden=view!=="costing";q("#studioView").hidden=view!=="studio";document.querySelectorAll("[data-student-view]").forEach(button=>button.classList.toggle("active",button.dataset.studentView===view));if(view==="costing"){updateCostRecipeOptions();renderCostAnalysis();}if(view==="studio")renderStudioLibrary();}
 
   q("#refreshEventData").addEventListener("click", refresh);
   document.querySelectorAll("[data-student-view]").forEach(button=>button.onclick=()=>showStudentView(button.dataset.studentView));
@@ -196,6 +220,8 @@
   ["#targetFoodCost","#menuPrice","#salesMix","#popularityBenchmark","#marginBenchmark"].forEach(selector=>q(selector).addEventListener("input",renderCostAnalysis));
   q("#costYield").addEventListener("input",()=>{const target=Math.max(1,Number(q("#costYield").value||1));costRows.forEach(row=>{if(Number.isFinite(row.perPortion))row.quantity=row.perPortion*target});renderCostRows();});
   q("#printCosting").onclick=()=>{document.body.classList.add("printing-costing");window.print();window.setTimeout(()=>document.body.classList.remove("printing-costing"),100);};
+  q("#studioLibrarySearch").addEventListener("input",renderStudioLibrary);
+  q("#studioLibraryCategory").addEventListener("change",renderStudioLibrary);
   q("#studioGoogleSearch").onclick=()=>window.open(`https://www.google.com/search?q=${encodeURIComponent(q("#studioSearchTerms").value.trim()||"professional standardized recipe")}`,"_blank","noopener");
   q("#importStudioUrl").onclick=importStudioUrl;
   q("#readStudioText").onclick=readStudioText;
@@ -219,6 +245,8 @@
     if (recipe) openRecipe(recipe.dataset.recipeEvent, recipe.dataset.recipeTask);
     const menuRecipe = event.target.closest("[data-menu-recipe-event]");
     if (menuRecipe) openRecipe(menuRecipe.dataset.menuRecipeEvent, "", menuRecipe.dataset.menuRecipeName);
+    const libraryRecipe = event.target.closest("[data-library-recipe]");
+    if (libraryRecipe) openLibraryRecipe(libraryRecipe.dataset.libraryRecipe);
     const print = event.target.closest("[data-print-event]");
     if (print) printEvent(print.dataset.printEvent);
   });

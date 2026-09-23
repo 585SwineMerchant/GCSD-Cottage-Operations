@@ -69,6 +69,13 @@ footer span{opacity:.72}
 .actions{display:flex;gap:9px;flex-wrap:wrap}
 .research-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}
 .research-tools button{margin-bottom:10px}
+.studio-library-tools{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:12px;align-items:end}
+.recipe-library{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px}
+.recipe-library-card{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border:1px solid var(--line);border-radius:10px;padding:15px;background:var(--cream)}
+.recipe-library-card h3{margin:.2rem 0;color:var(--green);font:700 1.15rem Georgia,serif}
+.recipe-library-card p:not(.eyebrow){margin:.25rem 0;color:var(--muted);font-size:.82rem}
+.recipe-library-card button{flex:0 0 auto}
+.library-summary{margin:.3rem 0;color:var(--muted)}
 .studio-intake{display:grid;gap:12px}
 .studio-divider{text-align:center;color:var(--muted);font-weight:800;text-transform:uppercase;font-size:.72rem;letter-spacing:.08em}
 .studio-drop{border:2px dashed #9eaea5;border-radius:10px;padding:20px;text-align:center;color:var(--muted);background:var(--cream);cursor:pointer}
@@ -95,8 +102,9 @@ td small{display:block;color:var(--muted)}
 .brand-logo{width:54px;height:54px}
 .brief{grid-template-columns:1fr}
 .event-header strong{text-align:left}
-.task dl,.recipe-grid,.lab-grid,.lab-fields,.cost-row,.research-tools{grid-template-columns:1fr}
+.task dl,.recipe-grid,.lab-grid,.lab-fields,.cost-row,.research-tools,.studio-library-tools{grid-template-columns:1fr}
 .recipe-grid section:last-child,.cost-row .wide{grid-column:auto}
+.recipe-library-card{flex-direction:column}
 }
 @media print{body:not(.printing-costing)>*:not(#printArea){display:none!important}
 body.printing-costing>.topbar,body.printing-costing>footer,body.printing-costing main>*:not(#costingView),body.printing-costing .student-nav,body.printing-costing .costing-hero button,body.printing-costing #addCostIngredient,body.printing-costing .remove-cost-row{display:none!important}

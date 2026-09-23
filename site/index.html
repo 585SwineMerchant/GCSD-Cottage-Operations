@@ -50,27 +50,34 @@
     </section>
 
     <section id="studioView" hidden>
-      <section class="hero costing-hero"><div><p class="eyebrow">Local student workspace</p><h1>Recipe Studio</h1><p>Build a standardized recipe draft, save it in this browser, and export it for teacher review. This page does not collect names, submit records, or write directly to the teacher system.</p></div></section>
+      <section class="hero costing-hero"><div><p class="eyebrow">Local student workspace</p><h1>Recipe Studio</h1><p>Browse the Cottage&rsquo;s teacher-approved menu and production recipes, or build a standardized recipe draft for teacher review. This page does not collect names, submit records, or write directly to the teacher system.</p></div></section>
       <article class="lab-panel">
-        <h2>1. Find or bring in a recipe</h2>
+        <h2>1. Cottage Menu &amp; Approved Recipes</h2>
+        <p class="notice compact">These are the current teacher-approved Cottage menu standards. Open any recipe to review ingredients, equipment, procedure, safety controls, and quality expectations.</p>
+        <div class="studio-library-tools"><label>Search the Cottage menu<input id="studioLibrarySearch" type="search" placeholder="Search recipes or categories"></label><label>Category<select id="studioLibraryCategory"><option value="">All categories</option></select></label></div>
+        <p id="studioLibrarySummary" class="library-summary" aria-live="polite"></p>
+        <div id="studioRecipeLibrary" class="recipe-library"></div>
+      </article>
+      <article class="lab-panel">
+        <h2>2. Find or bring in a recipe</h2>
         <div class="research-tools"><label>What recipe are you looking for?<input id="studioSearchTerms" placeholder="professional salsa fresca recipe"></label><button id="studioGoogleSearch" class="secondary" type="button">Search Google</button></div>
         <p class="notice compact">The most accurate option is the recipe webpage address. Copied text and screenshot reading remain available when a site cannot be imported.</p>
         <div class="studio-intake" id="studioIntake"><div class="research-tools"><label>Paste recipe webpage URL<input id="studioRecipeUrl" type="url" placeholder="https://example.com/recipe"></label><button id="importStudioUrl" type="button">Import recipe URL</button></div><div class="studio-divider">or paste text</div><label>Paste copied recipe text<textarea id="studioIntakeText" rows="10" placeholder="Paste the recipe title, yield, ingredients, and directions here."></textarea></label><button id="readStudioText" type="button">Read pasted recipe</button><div class="studio-divider">or use a screenshot</div><label>Choose a screenshot<input id="studioScreenshot" type="file" accept="image/png,image/jpeg,image/webp"></label><div class="studio-drop" id="studioDropZone" tabindex="0">Or click here and press Ctrl+V to paste a screenshot</div><div id="studioCropPanel" class="studio-crop-panel" hidden><strong>Drag a box around the recipe only</strong><p>Include the title, yield, ingredients, and instructions. Leave out ads and blank page space.</p><canvas id="studioCropCanvas" aria-label="Screenshot crop preview"></canvas><button id="resetStudioCrop" class="secondary" type="button">Use the full screenshot</button></div><button id="readStudioScreenshot" type="button">Read selected recipe area</button></div>
         <p id="studioIntakeStatus" class="notice compact" aria-live="polite">Nothing has been read yet.</p><div id="studioWarnings" class="notice compact" hidden></div>
       </article>
       <article class="lab-panel">
-        <h2>2. Review the recipe details</h2>
+        <h2>3. Review the recipe details</h2>
         <div class="lab-fields"><label>Recipe title<input id="studioName"></label><label>Category<input id="studioCategory" placeholder="Soup, bakery, entrée"></label><label>Standard yield quantity<input id="studioYieldQuantity" type="number" min="0.001" step="any"></label><label>Yield unit<input id="studioYieldUnit" placeholder="portions, quarts, loaves"></label><label>Portion / package<input id="studioPortion" placeholder="8 fl oz, 1 muffin"></label><label>Allergens and controls<input id="studioAllergens"></label></div>
         <label>Learning focus / competencies<textarea id="studioCompetencies" rows="2"></textarea></label>
       </article>
       <article class="lab-panel">
-        <h2>3. Check production information</h2>
+        <h2>4. Check production information</h2>
         <label>Ingredients · one per line: Ingredient | Numeric quantity or instruction | Unit | Preparation<textarea id="studioIngredients" rows="10" placeholder="Tomatoes | 10 | lb | diced&#10;Salt | to taste | |"></textarea></label>
         <div class="lab-fields"><label>Equipment · one per line<textarea id="studioEquipment" rows="6"></textarea></label><label>Procedure · one step per line<textarea id="studioProcedure" rows="10"></textarea></label><label>Safety controls<textarea id="studioSafety" rows="5"></textarea></label><label>Quality controls · one per line<textarea id="studioQuality" rows="5"></textarea></label></div>
         <label>Source, testing, or revision notes<textarea id="studioSourceNotes" rows="3" placeholder="Record the source and what changed during testing. Do not enter student names."></textarea></label>
       </article>
       <article class="lab-panel">
-        <h2>4. Save or export</h2><p id="studioStatus" class="notice compact" aria-live="polite">This draft stays only in this browser until you copy or download an export.</p>
+        <h2>5. Save or export</h2><p id="studioStatus" class="notice compact" aria-live="polite">This draft stays only in this browser until you copy or download an export.</p>
         <div class="actions"><button id="saveStudioDraft" type="button">Save on this device</button><button id="copyStudioExport" class="secondary" type="button">Copy teacher-review export</button><button id="downloadStudioExport" class="secondary" type="button">Download JSON</button><button id="clearStudioDraft" class="secondary" type="button">Clear draft</button></div>
       </article>
     </section>

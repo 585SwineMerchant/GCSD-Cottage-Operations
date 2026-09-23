@@ -4,6 +4,8 @@ const PUBLICATION_ITEMS_SHEET = "PublicationItems";
 const PUBLICATION_ITEM_HEADERS = ["publication_item_id", "publication_id", "publication_sequence", "event_id", "event_json"];
 const INGREDIENT_PRICES_SHEET = "IngredientPrices";
 const PUBLIC_PRICE_HEADERS = ["price_id", "ingredient_name", "recipe_unit", "package_description", "package_quantity", "package_price", "supplier", "sku", "notes", "active", "updated_at", "updated_by", "product_name", "aliases_json", "package_unit", "price_type", "store_location", "checked_at", "product_url", "source", "variable_weight", "estimated_count"];
+const RECIPES_SHEET = "Recipes";
+const PUBLIC_RECIPE_HEADERS = ["recipe_id", "name", "category", "status", "current_version", "standard_yield_quantity", "standard_yield_unit", "portion_size", "allergens", "competencies", "ingredients_json", "equipment_json", "procedure_json", "safety_controls", "quality_controls_json", "created_at", "created_by", "updated_at", "updated_by"];
 
 function configurePublicFeed(spreadsheetId) {
   const id = String(spreadsheetId || "").trim();
@@ -35,7 +37,20 @@ function latestSnapshot_() {
   } catch (_) {
     return emptySnapshot_("Published Event Orders are temporarily unavailable.");
   }
-  if (!sheet || sheet.getLastRow() < 2) return Object.assign(emptySnapshot_(""), { priceCatalog: publicPriceCatalog_(book) });
+  const publicExtras = {
+    priceCatalog: publicPriceCatalog_(book),
+    recipes: publicRecipeLibrary_(book)
+  };
+  publicExtras.cottageMenu = publicExtras.recipes.map(recipe => ({
+    recipeId: recipe.id,
+    name: recipe.name,
+    category: recipe.category,
+    version: recipe.version,
+    yield: recipe.yield,
+    portion: recipe.portion,
+    allergens: recipe.allergens
+  }));
+  if (!sheet || sheet.getLastRow() < 2) return Object.assign(emptySnapshot_(""), publicExtras);
   const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, PUBLICATION_HEADERS.length).getDisplayValues()
     .map((row, index) => ({ row, index }));
   rows.sort((a, b) => String(b.row[3]).localeCompare(String(a.row[3])) || b.index - a.index);
@@ -43,16 +58,16 @@ function latestSnapshot_() {
     const snapshot = JSON.parse(rows[0].row[5]);
     if (snapshot && snapshot.storage === "PublicationItems" && snapshot.publicationId) {
       const itemSheet = book.getSheetByName(PUBLICATION_ITEMS_SHEET);
-      if (!itemSheet || itemSheet.getLastRow() < 2) return emptySnapshot_("Published recipe data is temporarily unavailable.");
+      if (!itemSheet || itemSheet.getLastRow() < 2) return Object.assign(emptySnapshot_("Published recipe data is temporarily unavailable."), publicExtras);
       const itemRows = itemSheet.getRange(2, 1, itemSheet.getLastRow() - 1, PUBLICATION_ITEM_HEADERS.length).getDisplayValues();
       const matchingRows = itemRows.filter(row => String(row[1]) === String(snapshot.publicationId));
       const events = matchingRows.map(row => { try { return JSON.parse(row[4]); } catch (_) { return null; } }).filter(Boolean);
-      if (events.length !== Number(snapshot.eventCount || 0)) return emptySnapshot_("Published recipe data is incomplete.");
-      return Object.assign({}, snapshot, { events, priceCatalog: publicPriceCatalog_(book) });
+      if (events.length !== Number(snapshot.eventCount || 0)) return Object.assign(emptySnapshot_("Published recipe data is incomplete."), publicExtras);
+      return Object.assign({}, snapshot, publicExtras, { events });
     }
-    return snapshot && Array.isArray(snapshot.events) ? Object.assign({}, snapshot, { priceCatalog: publicPriceCatalog_(book) }) : emptySnapshot_("Published data is invalid.");
+    return snapshot && Array.isArray(snapshot.events) ? Object.assign({}, snapshot, publicExtras) : Object.assign(emptySnapshot_("Published data is invalid."), publicExtras);
   } catch (_) {
-    return emptySnapshot_("Published data is invalid.");
+    return Object.assign(emptySnapshot_("Published data is invalid."), publicExtras);
   }
 }
 
@@ -70,10 +85,64 @@ function publicPriceCatalog_(book) {
     }));
 }
 
+function publicRecipeLibrary_(book) {
+  const sheet = book.getSheetByName(RECIPES_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, PUBLIC_RECIPE_HEADERS.length).getDisplayValues()
+    .map(row => Object.fromEntries(PUBLIC_RECIPE_HEADERS.map((header, index) => [header, row[index]])))
+    .filter(item => String(item.status || "") === "Approved")
+    .map(item => {
+      const ingredientData = safeJsonValue_(item.ingredients_json, []).filter(value => value && typeof value === "object").slice(0, 200).map(value => ({
+        name: String(value.name || ""),
+        quantity: Number(value.quantity || 0),
+        quantityText: String(value.quantityText || value.quantity_text || ""),
+        unit: String(value.unit || ""),
+        preparation: String(value.preparation || "")
+      })).filter(value => value.name);
+      const standardYieldQuantity = Number(item.standard_yield_quantity || 0);
+      const standardYieldUnit = String(item.standard_yield_unit || "");
+      return {
+        id: String(item.recipe_id || ""),
+        name: String(item.name || ""),
+        category: String(item.category || "Uncategorized"),
+        version: Number(item.current_version || 0),
+        standardYieldQuantity,
+        standardYieldUnit,
+        yield: [standardYieldQuantity || "", standardYieldUnit].filter(Boolean).join(" "),
+        portion: String(item.portion_size || ""),
+        allergens: String(item.allergens || ""),
+        competencies: String(item.competencies || ""),
+        ingredientData,
+        ingredients: ingredientData.map(formatRecipeIngredient_),
+        equipment: safeJsonValue_(item.equipment_json, []).map(String).slice(0, 100),
+        procedure: safeJsonValue_(item.procedure_json, []).map(String).slice(0, 200),
+        safetyControls: String(item.safety_controls || ""),
+        qualityControls: safeJsonValue_(item.quality_controls_json, []).map(String).slice(0, 100),
+        updatedAt: String(item.updated_at || "")
+      };
+    })
+    .sort((a, b) => String(a.category).localeCompare(String(b.category)) || String(a.name).localeCompare(String(b.name)));
+}
+
+function formatRecipeIngredient_(item) {
+  const quantity = Number(item.quantity || 0);
+  const amount = quantity > 0 ? [quantity, item.unit].filter(Boolean).join(" ") : String(item.quantityText || "");
+  return [amount, item.name, item.preparation ? `(${item.preparation})` : ""].filter(Boolean).join(" ");
+}
+
+function safeJsonValue_(value, fallback) {
+  try {
+    const parsed = JSON.parse(String(value || ""));
+    return parsed == null ? fallback : parsed;
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function safeJsonArray_(value) {
   try { const parsed = JSON.parse(String(value || "[]")); return Array.isArray(parsed) ? parsed.map(String).slice(0, 30) : []; } catch (_) { return []; }
 }
 
 function emptySnapshot_(message) {
-  return { schemaVersion: 2, revision: 0, publicationSequence: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [], message: message || "" };
+  return { schemaVersion: 4, revision: 0, publicationSequence: 0, publishedAt: "", events: [], yearArchive: [], priceCatalog: [], recipes: [], cottageMenu: [], message: message || "" };
 }
